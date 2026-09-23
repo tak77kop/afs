@@ -1,8 +1,8 @@
 [**English**](README.md) | [**日本語**](README.ja.md)
 
-# RFS: Robot Family System (ロボット家族システム)
+# AFS: Agent Family System (エージェント家族システム)
 
-RFS (Robot Family System) は、父親ロボット・母親ロボット・娘ロボットのようなロボット（エージェント）と人から構成される「新しい家族」を実現しようとするロボット家族システムです。人がロボット家族とインタラクションを行うことで家族のような温かみや安全基地感を感じ、最終的には孤立・孤独感を軽減することを目指します。ROS2とLLMを用いて、家族のような会話や挙動を行うマルチエージェントシステムを実装しています。人はロボット家族の会話中にマイクに向かって話しかけることでいつでも介入することができます。ロボット家族の会話をより人間の家族のような会話にしていくために、RFSはOlsonの家族円環モデルおよびその評価尺度であるFACES IVに基づいてロボット家族の挙動を調整します。具体的には、Olsonの家族円環モデル上で現在のロボット家族がどの状態にあるかをプロットすることで可視化し、アンバランスタイプの場合は勾配降下法（Gradient Descent）を用いて理想的なバランスタイプの家族に近づくようにします。これらの調整は、ロボット家族メンバーとは別のセラピストノード（エージェント）が行います。
+AFS (Agent Family System) は、父親ロボット・母親ロボット・娘ロボットのようなロボット（エージェント）と人から構成される「新しい家族」を実現しようとするエージェント家族システムです。人がロボット家族とインタラクションを行うことで家族のような温かみや安全基地感を感じ、最終的には孤立・孤独感を軽減することを目指します。ROS2とLLMを用いて、家族のような会話や挙動を行うマルチエージェントシステムを実装しています。人はロボット家族の会話中にマイクに向かって話しかけることでいつでも介入することができます。ロボット家族の会話をより人間の家族のような会話にしていくために、AFSはOlsonの家族円環モデルおよびその評価尺度であるFACES IVに基づいてロボット家族の挙動を調整します。具体的には、Olsonの家族円環モデル上で現在のロボット家族がどの状態にあるかをプロットすることで可視化し、アンバランスタイプの場合は勾配降下法（Gradient Descent）を用いて理想的なバランスタイプの家族に近づくようにします。これらの調整は、ロボット家族メンバーとは別のセラピストノード（エージェント）が行います。
 
 このプロジェクトは、筑波大学 **田中文英研究室** の研究の一部として開発されています。当研究室では、主にHRI（Human-Robot Interaction）に焦点を当て、いつもわたしたちのそばにいてわたしたちの人生を助けてくれる知的なエージェント技術を創出するような研究を行っています。
 
@@ -17,7 +17,7 @@ RFS (Robot Family System) は、父親ロボット・母親ロボット・娘ロ
 
 ## 🏗 システムアーキテクチャと処理フロー
 
-RFSは、**セラピストノード** (`rfs_therapist`) がOlsonの家族円環モデルに基づいてロボット家族メンバーをバランスタイプへと導くクローズドループ・サイクルで動作します。**人（ユーザ）** はいつでもロボット家族の会話に介入し、影響を与えることができます。
+AFSは、**セラピストノード** (`afs_therapist`) がOlsonの家族円環モデルに基づいてロボット家族メンバーをバランスタイプへと導くクローズドループ・サイクルで動作します。**人（ユーザ）** はいつでもロボット家族の会話に介入し、影響を与えることができます。
 
 ![System Architecture](docs/images/architecture.png)
 
@@ -25,13 +25,13 @@ RFSは、**セラピストノード** (`rfs_therapist`) がOlsonの家族円環�
 
 | ノード | 役割 | 主な機能 |
 | :--- | :--- | :--- |
-| **`rfs_family`** | ロボット家族ノード | LLMを用いてロボット家族の個性（父親・母親・娘など）をシミュレートします。 |
-| **`rfs_tts`** | Text-to-Speechノード | Gemini Liveを用いてロボット家族メンバーが喋るための音声合成を行います。 |
-| **`rfs_toio`** | Toioロボットノード| ロボット家族メンバーを各[toio™](https://toio.io/) ロボットに割り当てて、物理的な移動を可能にします。 |
-| **`rfs_therapist`** | セラピストノード | 勾配降下法を用いて、ロボット家族がバランスタイプに近づくように導きます。 |
-| **`rfs_viewer`** | 家族円環モデル可視化ノード | ロボット家族の状態（軌跡）を家族円環モデル上にプロットします。 |
-| **`rfs_evaluation`** | FACESⅣ評価ノード | ロボット家族の会話ログをもとにFACESⅣを評価します。 |
-| **`rfs_stt`** | Speech-to-Textノード | Gemini Liveを用いて人が介入するためのリアルタイム音声認識を行います。 |
+| **`afs_family`** | ロボット家族ノード | LLMを用いてロボット家族の個性（父親・母親・娘など）をシミュレートします。 |
+| **`afs_tts`** | Text-to-Speechノード | Gemini Liveを用いてロボット家族メンバーが喋るための音声合成を行います。 |
+| **`afs_toio`** | Toioロボットノード| ロボット家族メンバーを各[toio™](https://toio.io/) ロボットに割り当てて、物理的な移動を可能にします。 |
+| **`afs_therapist`** | セラピストノード | 勾配降下法を用いて、ロボット家族がバランスタイプに近づくように導きます。 |
+| **`afs_viewer`** | 家族円環モデル可視化ノード | ロボット家族の状態（軌跡）を家族円環モデル上にプロットします。 |
+| **`afs_evaluation`** | FACESⅣ評価ノード | ロボット家族の会話ログをもとにFACESⅣを評価します。 |
+| **`afs_stt`** | Speech-to-Textノード | Gemini Liveを用いて人が介入するためのリアルタイム音声認識を行います。 |
 
 ### シーケンス図
 
@@ -41,30 +41,30 @@ RFSは、**セラピストノード** (`rfs_therapist`) がOlsonの家族円環�
 
 ```mermaid
 sequenceDiagram
-    participant Launch as rfs_bringup (launch all)
-    participant Leader as rfs_family_member (発話者)
-    participant Doc as rfs_document_processor
-    participant Gen as rfs_generator
-    participant TTS as rfs_tts
-    participant Toio as rfs_toio
-    participant Next as rfs_family_member (次の発話者)
+    participant Launch as afs_bringup (launch all)
+    participant Leader as afs_family_member (発話者)
+    participant Doc as afs_document_processor
+    participant Gen as afs_generator
+    participant TTS as afs_tts
+    participant Toio as afs_toio
+    participant Next as afs_family_member (次の発話者)
 
     Launch->>Launch: 初回発話者を決定(Geminiによる多数決投票)
-    Launch->>Leader: ros2 run rfs_family rfs_family_member --initiate
-    TTS-->>Leader: rfs_tts_initialization "tts_initialized"
-    Toio-->>Leader: rfs_toio_status "toios_ready"
-    Leader->>Doc: rfs_behavioral_info_request / rfs_few_shot_request
-    Doc-->>Leader: rfs_behavioral_info_results / rfs_few_shot_results
-    Leader->>Gen: rfs_generator_request (役割・履歴・臨床ガイドライン)
+    Launch->>Leader: ros2 run afs_family afs_family_member --initiate
+    TTS-->>Leader: afs_tts_initialization "tts_initialized"
+    Toio-->>Leader: afs_toio_status "toios_ready"
+    Leader->>Doc: afs_behavioral_info_request / afs_few_shot_request
+    Doc-->>Leader: afs_behavioral_info_results / afs_few_shot_results
+    Leader->>Gen: afs_generator_request (役割・履歴・臨床ガイドライン)
     Gen->>Gen: プロンプト構築、Gemini API呼び出し
-    Gen-->>Leader: rfs_generator_results (発話/行動のCSV1行)
+    Gen-->>Leader: afs_generator_results (発話/行動のCSV1行)
     Leader->>Leader: conversation_history.txt に追記
-    Leader->>TTS: rfs_speak_text (サービス呼び出し)
-    Leader->>Next: rfs_family_actions "prepare_turn" (次発話の先行生成)
-    TTS-->>Leader: rfs_tts_status "start" / rfs_tts_finished "finished"
-    Leader->>Toio: rfs_toio_move_script (moveがnone以外の場合)
-    Toio-->>Leader: rfs_toio_move_finished
-    Leader->>Next: rfs_family_actions "start_turn"
+    Leader->>TTS: afs_speak_text (サービス呼び出し)
+    Leader->>Next: afs_family_actions "prepare_turn" (次発話の先行生成)
+    TTS-->>Leader: afs_tts_status "start" / afs_tts_finished "finished"
+    Leader->>Toio: afs_toio_move_script (moveがnone以外の場合)
+    Toio-->>Leader: afs_toio_move_finished
+    Leader->>Next: afs_family_actions "start_turn"
 ```
 
 #### 2. 定期的なFACES IV評価サイクル
@@ -73,27 +73,27 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Member as rfs_family_member (各メンバー)
-    participant Ther as rfs_therapist
-    participant MEval as rfs_member_evaluator
-    participant Eval as rfs_evaluator
-    participant Opt as rfs_optimizer
-    participant Viewer as rfs_viewer
+    participant Member as afs_family_member (各メンバー)
+    participant Ther as afs_therapist
+    participant MEval as afs_member_evaluator
+    participant Eval as afs_evaluator
+    participant Opt as afs_optimizer
+    participant Viewer as afs_viewer
 
-    Member->>Ther: rfs_trigger_evaluation (ステップ境界に到達)
-    Ther->>Member: rfs_request_member_evaluation
-    Member->>MEval: rfs_member_eval_request (自分の会話履歴)
+    Member->>Ther: afs_trigger_evaluation (ステップ境界に到達)
+    Ther->>Member: afs_request_member_evaluation
+    Member->>MEval: afs_member_eval_request (自分の会話履歴)
     MEval->>MEval: Gemini APIを呼び出し(FACES IV 62項目の主観評価)
-    MEval-->>Ther: rfs_member_evaluation_results
+    MEval-->>Ther: afs_member_evaluation_results
     Note over Ther: 全メンバー分の応答が揃うまで待機
-    Ther->>Eval: rfs_evaluator_request (集約された評価値)
+    Ther->>Eval: afs_evaluator_request (集約された評価値)
     Eval->>Eval: 評価値を平均し、パーセンタイルに変換してから座標xとyを算出
-    Eval->>Opt: rfs_optimizer_request
+    Eval->>Opt: afs_optimizer_request
     Opt->>Opt: 勾配降下法で次回目標座標txとtyを算出
-    Opt-->>Ther: rfs_evaluator_results (x, y, tx, ty, 比率など)
+    Opt-->>Ther: afs_evaluator_results (x, y, tx, ty, 比率など)
     Ther->>Ther: evaluation_history.csv記録、軌跡更新、プロット画像生成
-    Ther-->>Viewer: rfs_faces_plot_updated (プロット画像パス)
-    Ther->>Member: rfs_evaluation_complete
+    Ther-->>Viewer: afs_faces_plot_updated (プロット画像パス)
+    Ther->>Member: afs_evaluation_complete
     Note over Member: リーダーが次の発話者を指定して会話を再開
 ```
 
@@ -102,28 +102,28 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User as ユーザー
-    participant STT as rfs_stt
-    participant Members as rfs_family_member (全メンバー)
-    participant TTS as rfs_tts
+    participant STT as afs_stt
+    participant Members as afs_family_member (全メンバー)
+    participant TTS as afs_tts
 
     User->>STT: マイクに向かって話す(VADが発話を検出)
-    STT-->>Members: rfs_user_intervention "user_speech_started"
-    Members->>TTS: rfs_interrupt_tts "stop_all"
+    STT-->>Members: afs_user_intervention "user_speech_started"
+    Members->>TTS: afs_interrupt_tts "stop_all"
     STT->>STT: 録音した音声をGemini APIで文字起こし
-    STT-->>Members: rfs_user_intervention "user_speech_transcribed:<テキスト>"
+    STT-->>Members: afs_user_intervention "user_speech_transcribed:<テキスト>"
     Members->>Members: 各メンバーが応答者をGemini APIで投票
-    Members-->>STT: rfs_responder_vote
+    Members-->>STT: afs_responder_vote
     STT->>STT: 投票を集計(多数決、同数時はfamily_configの順で決定)
-    STT-->>Members: rfs_user_intervention "user_decision:<応答者>"
+    STT-->>Members: afs_user_intervention "user_decision:<応答者>"
     Note over Members: 選出されたメンバーのみ応答し、他は一時停止のまま
-    Members->>Members: rfs_intervention_resolved (ロック解除、通常ターンを再開)
+    Members->>Members: afs_intervention_resolved (ロック解除、通常ターンを再開)
 ```
 
 ## 🚀 はじめに
 
 ### 🖥 ネイティブインストール（Ubuntu 24.04 のみ）（推奨）
 
-Dockerを使わずにUbuntu上で直接RFSを実行する場合:
+Dockerを使わずにUbuntu上で直接AFSを実行する場合:
 
 #### 前提条件
 - **OS**: Ubuntu 24.04 (Noble Numbat)
@@ -147,16 +147,16 @@ pip install openai google-genai numpy sounddevice webrtcvad matplotlib toio-py P
 1. **クローンとビルド**:
    ```bash
    cd ~
-   git clone https://github.com/robotaichi/rfs.git
-   cd rfs
+   git clone https://github.com/robotaichi/rfs.git afs
+   cd afs
    colcon build
    source install/setup.bash
    ```
 
-2. **🚀 RFSの起動 (最重要コマンド)**:
-   必要なAPIキーの設定（下部の「設定 (Configuration)」セクションを参照）が完了した後、以下のメインコマンドを実行してロボット家族システムを一括起動します：
+2. **🚀 AFSの起動 (最重要コマンド)**:
+   必要なAPIキーの設定（下部の「設定 (Configuration)」セクションを参照）が完了した後、以下のメインコマンドを実行してエージェント家族システムを一括起動します：
    ```bash
-   ros2 launch rfs_bringup rfs_all.launch.py
+   ros2 launch afs_bringup afs_all.launch.py
    ```
 
 ---
@@ -164,7 +164,7 @@ pip install openai google-genai numpy sounddevice webrtcvad matplotlib toio-py P
 <details>
 <summary><strong>🐳 Docker クイックスタート（非推奨）</strong></summary>
 
-**RFSを試す最も簡単な方法です。** UbuntuやROS2のインストール不要 — **Windows, Mac, Linux** のどの環境でもブラウザから利用できます。
+**AFSを試す最も簡単な方法です。** UbuntuやROS2のインストール不要 — **Windows, Mac, Linux** のどの環境でもブラウザから利用できます。
 
 > [!WARNING]
 > **音声入出力の制限**: Docker環境ではマイク（STT）/ スピーカー（TTS）機能はLinuxホストでのみフル動作します。Windows / Mac では音声デバイスのパススルーが困難なため、音声機能は利用できません。テキストベースのLLM対話やFACES IV可視化などの主要機能は全プラットフォームで動作します。
@@ -179,8 +179,8 @@ pip install openai google-genai numpy sounddevice webrtcvad matplotlib toio-py P
 
 **2. セットアップ**
 ```bash
-git clone https://github.com/robotaichi/rfs.git
-cd rfs
+git clone https://github.com/robotaichi/rfs.git afs
+cd afs
 
 # APIキーを設定
 cp docker/.env.example .env
@@ -199,13 +199,13 @@ nano .env  # OPENAI_API_KEY と GEMINI_API_KEY を入力
 docker compose up --build
 ```
 
-![Dockerビルド完了](docs/images/rfs_docker_build.png)
+![Dockerビルド完了](docs/images/afs_docker_build.png)
 
 **3. ブラウザからアクセス**
 
 ブラウザで **http://localhost:6080/vnc.html** を開き、**「接続」** ボタンをクリックすると、XFCEデスクトップが表示されます。
 
-![Docker上でnoVNC経由で動作するRFS](docs/images/rfs_docker.png)
+![Docker上でnoVNC経由で動作するAFS](docs/images/afs_docker.png)
 
 **4. 音声の有効化（Windows/Mac のみ）**
 
@@ -217,11 +217,11 @@ VNCデスクトップに接続後、右下の **🔇** ボタンをクリック�
 > docker compose -f docker-compose.yml -f docker-compose.linux.yml up --build
 > ```
 
-**5. RFSの起動**
-- デスクトップの **「RFS Launch」** アイコンをダブルクリック
+**5. AFSの起動**
+- デスクトップの **「AFS Launch」** アイコンをダブルクリック
 - または、ターミナルを開いて以下を実行:
   ```bash
-  ros2 launch rfs_bringup rfs_all.launch.py
+  ros2 launch afs_bringup afs_all.launch.py
   ```
 
 **6. 停止**
@@ -243,18 +243,18 @@ docker compose up
 | :--- | :--- |
 | 起動（フォアグラウンド） | `docker compose up` |
 | 起動（バックグラウンド） | `docker compose up -d` |
-| ログ確認 | `docker logs rfs` |
+| ログ確認 | `docker logs afs` |
 | 停止 | `docker compose down` |
 | 更新 (最新化) | `git pull origin main && docker compose build` |
 | コード変更後に再ビルド | `docker compose up --build` |
-| コンテナ内に入る | `docker exec -it rfs bash` |
+| コンテナ内に入る | `docker exec -it afs bash` |
 
 | 設定項目 | 詳細 |
 | :--- | :--- |
 | **ブラウザアクセス** | `http://localhost:6080/vnc.html` |
 | **解像度変更** | `.env` の `VNC_RESOLUTION` を変更（デフォルト: `1920x1080`） |
 | **VNCパスワード設定** | `.env` の `VNC_PASSWORD` を設定 |
-| **セッションデータ** | Docker Volume `rfs-session-data` に自動保存 |
+| **セッションデータ** | Docker Volume `afs-session-data` に自動保存 |
 
 **🔧 トラブルシューティング**
 
@@ -275,15 +275,15 @@ toio™ ロボットの上にスピーカーを載せて移動させる場合、
 2.  **スピーカーのペアリング**: 使用するすべての Bluetooth スピーカーを Ubuntu PC とペアリングし、接続状態にしてください。
 3.  **紐付けスクリプトの実行**: 
     ```bash
-    cd ~/rfs
-    python3 src/rfs_toio/rfs_toio/toio_speaker_match.py
+    cd ~/afs
+    python3 src/afs_toio/afs_toio/toio_speaker_match.py
     ```
 3.  **役割の割り当て (逐次実行)**: スクリプトを実行すると、まずどれか一つのスピーカーから「Speaker [役割名]. Please place this speaker on the rotating Toio.」という音声が流れます。その音声が聞こえたスピーカーを、その直後に回転移動した toio™ の上に載せてください。これが完了すると次のスピーカーから音声が再生されるので、同様に回転した toio™ の上に載せる作業をすべてのスピーカーで繰り返してください。
 4.  **設定の保存**: すべてのペアリングが完了すると、自動的に `config.json` に ID が保存されます。
 
 ### 設定 (Configuration)
 
-RFSを起動する前に、LLMを使用するために有効なAPIキーを設定する必要があります。設定を永続化するには、`~/.bashrc` に追記してください：
+AFSを起動する前に、LLMを使用するために有効なAPIキーを設定する必要があります。設定を永続化するには、`~/.bashrc` に追記してください：
 
 ```bash
 # 1. .bashrc を開く
@@ -300,15 +300,15 @@ source ~/.bashrc
 - [**`OPENAI_API_KEY`**](https://platform.openai.com/api-keys): LLMベースの対話生成および心理マッピングに不可欠です。
 - [**`GEMINI_API_KEY`**](https://aistudio.google.com/app/apikey): Gemini Liveベースの音声書き起こし（STT）および低遅延の音声合成（TTS）に必要です。
 
-2. **RFS起動（必要なノードを一斉起動）**:
+2. **AFS起動（必要なノードを一斉起動）**:
    ```bash
-   ros2 launch rfs_bringup rfs_all.launch.py
+   ros2 launch afs_bringup afs_all.launch.py
    ```
 
 ## ⚙️ 設定 (Settings)
 
 ### `config.json` 仕様
-`src/rfs_config/config/config.json` に配置されています。
+`src/afs_config/config/config.json` に配置されています。
 
 | パラメータ | 型 | デフォルト | 説明 |
 | :--- | :--- | :--- | :--- |
@@ -567,7 +567,7 @@ source ~/.bashrc
 外部の研究者が、LLMによって生成されたFACES-IV評価を検証するための専用Webアプリケーションです。
 
 ### 機能
-- **アーカイブ閲覧**: `src/rfs_database/archive/` に保存された過去の実験セッションを閲覧できます。
+- **アーカイブ閲覧**: `src/afs_database/archive/` に保存された過去の実験セッションを閲覧できます。
 - **会話コンテキスト**: FACES-IVの質問票と並べて、会話履歴の全文を参照できます。
 - **評価フォーム**: 人間の専門家としてFACES-IV質問票（62項目）に回答できます。
 - **比較**: 人間のスコアとロボットの自己評価スコアを比較できます。
@@ -577,18 +577,18 @@ source ~/.bashrc
 
 **方法 1: ROS2 Run を使用する (推奨)**
 ```bash
-ros2 run rfs_evaluator_app rfs_evaluator_app
+ros2 run afs_evaluator_app afs_evaluator_app
 ```
 
 **方法 2: Python を直接実行する**
 ```bash
-python3 src/rfs_evaluator_app/rfs_evaluator_app/app.py
+python3 src/afs_evaluator_app/afs_evaluator_app/app.py
 ```
 
 起動後、ブラウザで **http://localhost:5001** を開いてください。
 
 ## 💾 データの永続性とアーカイブ
-シミュレーション終了時（`Ctrl+C`）、対話履歴や評価データ、軌跡ログなどは自動的に `src/rfs_database/archive/` 以下に日付ごとにアーカイブ・保存されます。
+シミュレーション終了時（`Ctrl+C`）、対話履歴や評価データ、軌跡ログなどは自動的に `src/afs_database/archive/` 以下に日付ごとにアーカイブ・保存されます。
 
 ## 📜 ライセンス
 このプロジェクトは MIT ライセンスの下で提供されています。

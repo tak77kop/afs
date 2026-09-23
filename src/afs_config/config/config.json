@@ -1,0 +1,50 @@
+{
+  "language": "ja",
+  "theme": "クリスマス",
+  "chat_mode": 0,
+  "toio_move": 0,
+  "target_user": "おじいちゃん",
+  "vad_aggressiveness": 3,
+  "silence_duration_s": 1.5,
+  "speech_trigger_frames": 5,
+  "vad_debug": false,
+  "vad_energy_threshold": 2000.0,
+  "family_config": [
+    "father",
+    "mother",
+    "daughter"
+  ],
+  "toio_speaker_match": [
+    {
+      "role": "father",
+      "toio_id": "FA:60:73:56:24:48",
+      "speaker_id": "alsa_output.usb-Synaptics_Hi-Res_Audio_000000000000000000000000-00.iec958-stereo"
+    },
+    {
+      "role": "mother",
+      "toio_id": "ED:E5:07:BE:E1:55",
+      "speaker_id": "alsa_output.usb-KTMicro_KT_USB_Audio_2021-06-07-0000-0000-0000--00.iec958-stereo"
+    },
+    {
+      "role": "daughter",
+      "toio_id": "F6:CB:DA:40:08:AD",
+      "speaker_id": "alsa_output.pci-0000_00_1f.3.analog-stereo"
+    }
+  ],
+  "experiment": "予備実験2",
+  "w1": 1.0,
+  "w2": 1.0,
+  "w3": 1.2,
+  "turns_per_step": 10,
+  "terminal_mode": "gnome-terminal",
+  "initial_coords": {
+    "x": 50.0,
+    "y": 50.0
+  },
+  "learning_rate_scaling": 0.15,
+  "llm_model": "gemini-3.1-flash-lite",
+  "llm_temperature": 1.0,
+  "llm_evaluation_model": "gemini-3.1-flash-lite",
+  "llm_evaluation_temperature": 1.0,
+  "shutdown_timer_minutes": 0
+}

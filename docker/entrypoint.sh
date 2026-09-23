@@ -1,12 +1,12 @@
 #!/bin/bash
 ###############################################################################
-# RFS Docker Entrypoint
-# Starts VNC server, noVNC proxy, PulseAudio, and configures RFS for Docker
+# AFS Docker Entrypoint
+# Starts VNC server, noVNC proxy, PulseAudio, and configures AFS for Docker
 ###############################################################################
 set -e
 
 echo "============================================="
-echo "  RFS (Robot Family System) Docker Container"
+echo "  AFS (Agent Family System) Docker Container"
 echo "============================================="
 
 # ─── Configuration ────────────────────────────────────────────────────────────
@@ -15,10 +15,10 @@ VNC_DISPLAY=":1"
 VNC_PORT=5901
 NOVNC_PORT=6080
 
-# ─── Configure RFS for Docker (switch terminal_mode to xterm) ─────────────────
+# ─── Configure AFS for Docker (switch terminal_mode to xterm) ─────────────────
 for CONFIG_FILE in \
-    /home/ubuntu/rfs/src/rfs_config/config/config.json \
-    /home/ubuntu/rfs/install/rfs_config/share/rfs_config/config/config.json; do
+    /home/ubuntu/afs/src/afs_config/config/config.json \
+    /home/ubuntu/afs/install/afs_config/share/afs_config/config/config.json; do
     if [ -f "$CONFIG_FILE" ]; then
         python3 -c "
 import json
@@ -41,7 +41,7 @@ else
     pulseaudio --start --exit-idle-time=-1 2>/dev/null || true
     sleep 1
     # Start audio bridge WebSocket server (TTS/STT via browser)
-    python3 /home/ubuntu/rfs/docker/audio_bridge.py &
+    python3 /home/ubuntu/afs/docker/audio_bridge.py &
     AUDIO_BRIDGE_PID=$!
     echo "[entrypoint] Audio bridge started (PID: $AUDIO_BRIDGE_PID)"
 fi
@@ -73,17 +73,17 @@ NOVNC_PID=$!
 sleep 1
 echo ""
 echo "============================================="
-echo "  ✅ RFS is ready!"
+echo "  ✅ AFS is ready!"
 echo ""
 echo "  🌐 Open in browser: http://localhost:${NOVNC_PORT}/vnc.html"
 if [ -z "${PULSE_SERVER:-}" ]; then
     echo "  🔊 Audio bridge: enabled (click 🔇 icon in VNC page)"
 fi
 echo ""
-echo "  📋 To launch RFS:"
-echo "     Double-click 'RFS Launch' on the desktop"
+echo "  📋 To launch AFS:"
+echo "     Double-click 'AFS Launch' on the desktop"
 echo "     or open a terminal and run:"
-echo "     ros2 launch rfs_bringup rfs_all.launch.py"
+echo "     ros2 launch afs_bringup afs_all.launch.py"
 echo ""
 if [ -n "$OPENAI_API_KEY" ]; then
     echo "  🔑 OpenAI API Key: SET"

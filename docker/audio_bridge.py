@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-RFS Audio Bridge — WebSocket server that streams audio between
+AFS Audio Bridge — WebSocket server that streams audio between
 the container's PulseAudio and the user's browser.
 
 Audio Output (TTS → Browser):

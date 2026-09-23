@@ -1,5 +1,5 @@
 ###############################################################################
-# RFS - Linux Audio Passthrough Override
+# AFS - Linux Audio Passthrough Override
 #
 # Usage (Linux only — enables direct PulseAudio passthrough):
 #   docker compose -f docker-compose.yml -f docker-compose.linux.yml up --build
@@ -9,7 +9,7 @@
 ###############################################################################
 
 services:
-  rfs:
+  afs:
     environment:
       - PULSE_SERVER=unix:/run/user/1000/pulse/native
     volumes:

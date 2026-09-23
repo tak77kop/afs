@@ -1,27 +1,27 @@
-# CLAUDE.md — rfs Repository Refactoring Guide
+# CLAUDE.md — afs Repository Refactoring Guide
 
 This file records the guidelines that Claude Code (and any future agent/developer
-touching this repository) must follow when preparing **rfs (Robotic Family Simulation)**
+touching this repository) must follow when preparing **afs (Agent Family System)**
 for public release on GitHub.
 
 ## 0. About this project
 
-`rfs` is a ROS 2 (jazzy) workspace that combines several pseudo-family robots (toio),
+`afs` is a ROS 2 (jazzy) workspace that combines several pseudo-family robots (toio),
 voice interaction (STT/TTS), and LLM (Gemini API) based dialogue generation and
 psychological evaluation (FACES IV) into a family-therapy simulation.
-`ros2 launch rfs_bringup rfs_all.launch.py` (a.k.a. "launch all") starts every node at once.
+`ros2 launch afs_bringup afs_all.launch.py` (a.k.a. "launch all") starts every node at once.
 
 Package layout:
-- `rfs_bringup` — launch files used to start the system
-- `rfs_family` — family member conversation state machine, dialogue generation, self-evaluation, reference document delivery
-- `rfs_therapist` — combines FACES IV scores, calculates the next target using gradient descent, and draws the plot
-- `rfs_stt` — voice activity detection (VAD) on microphone input and speech recognition using the Gemini API
-- `rfs_tts` — speech synthesis using the Gemini API, playback/volume control through PulseAudio/PipeWire
-- `rfs_toio` / `rfs_toio.toio_speaker_match` — toio cube scanning/connection/movement control, automatic speaker pairing
-- `rfs_viewer` — real-time display of the evaluation plot using Tkinter
-- `rfs_evaluator_app` — Flask validation web app for researchers (no ROS2 dependency)
-- `rfs_interfaces` — custom service definitions (`TTSService`)
-- `rfs_config` / `rfs_database` — configuration files and runtime data
+- `afs_bringup` — launch files used to start the system
+- `afs_family` — family member conversation state machine, dialogue generation, self-evaluation, reference document delivery
+- `afs_therapist` — combines FACES IV scores, calculates the next target using gradient descent, and draws the plot
+- `afs_stt` — voice activity detection (VAD) on microphone input and speech recognition using the Gemini API
+- `afs_tts` — speech synthesis using the Gemini API, playback/volume control through PulseAudio/PipeWire
+- `afs_toio` / `afs_toio.toio_speaker_match` — toio cube scanning/connection/movement control, automatic speaker pairing
+- `afs_viewer` — real-time display of the evaluation plot using Tkinter
+- `afs_evaluator_app` — Flask validation web app for researchers (no ROS2 dependency)
+- `afs_interfaces` — custom service definitions (`TTSService`)
+- `afs_config` / `afs_database` — configuration files and runtime data
 
 ## 1. Top priority: "Don't break what already works"
 
@@ -67,7 +67,7 @@ The goal is that this logic layer can be unit-tested and reused without ROS2 at 
 
 ### 2.3 What is intentionally left unsplit
 Callbacks such as `message_callback` / `publish_pending_scenario` /
-`tts_finished_callback` / `move_finished_callback` in `rfs_family_member.py`, where
+`tts_finished_callback` / `move_finished_callback` in `afs_family_member.py`, where
 **"receive message → decide state → publish" is one state change with all its
 parts tied closely together**, are **not** forced into a "move to a logic class →
 Node receives the result and publishes it" shape.
@@ -88,17 +88,17 @@ each step to improve readability instead.
 
 | Package | What was moved into the logic layer |
 |---|---|
-| `rfs_therapist` | FACES plot generation (matplotlib), coordinate conversion, FACES table loading, CSV logging → `faces_plotter.py` |
-| `rfs_therapist/rfs_evaluator` | Percentile conversion and score calculation → `faces_scoring.py` |
-| `rfs_therapist/rfs_optimizer` | Target calculation using gradient descent → `gradient_optimizer.py` |
-| `rfs_stt` | VAD recording and Gemini speech recognition (`GeminiLiveRecorder`), microphone device selection → `stt_backend.py` |
-| `rfs_tts` | Gemini speech synthesis/playback (`GeminiTTS`), PulseAudio/PipeWire volume control → `tts_backend.py` |
-| `rfs_toio` | BLE scanning and toio control utilities → `toio_backend.py` |
-| `rfs_toio/toio_speaker_match` | Speaker detection, system TTS (`SystemTTS`), automatic pairing logic → `speaker_matching_backend.py` |
-| `rfs_family/rfs_family_member` | Voice assignment, history file I/O, role-name normalization → `family_member_support.py` (state-transition callbacks stay in place) |
-| `rfs_evaluator_app` | FACES item definitions and parsing functions → `faces_data.py` |
+| `afs_therapist` | FACES plot generation (matplotlib), coordinate conversion, FACES table loading, CSV logging → `faces_plotter.py` |
+| `afs_therapist/afs_evaluator` | Percentile conversion and score calculation → `faces_scoring.py` |
+| `afs_therapist/afs_optimizer` | Target calculation using gradient descent → `gradient_optimizer.py` |
+| `afs_stt` | VAD recording and Gemini speech recognition (`GeminiLiveRecorder`), microphone device selection → `stt_backend.py` |
+| `afs_tts` | Gemini speech synthesis/playback (`GeminiTTS`), PulseAudio/PipeWire volume control → `tts_backend.py` |
+| `afs_toio` | BLE scanning and toio control utilities → `toio_backend.py` |
+| `afs_toio/toio_speaker_match` | Speaker detection, system TTS (`SystemTTS`), automatic pairing logic → `speaker_matching_backend.py` |
+| `afs_family/afs_family_member` | Voice assignment, history file I/O, role-name normalization → `family_member_support.py` (state-transition callbacks stay in place) |
+| `afs_evaluator_app` | FACES item definitions and parsing functions → `faces_data.py` |
 
-`rfs_viewer` already separates `PlotViewerGUI` (GUI/display logic) from `RFSViewer`
+`afs_viewer` already separates `PlotViewerGUI` (GUI/display logic) from `AFSViewer`
 (ROS2 communication) — this is the ideal shape for this repository.
 
 ## 5. Verification steps

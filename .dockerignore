@@ -14,15 +14,15 @@ __pycache__/
 *.egg-info/
 
 # Session data (should start fresh)
-src/rfs_database/archive/
-src/rfs_database/conversation_history.txt
-src/rfs_database/evaluation_plot.png
-src/rfs_database/evaluation_plot_bg.png
-src/rfs_database/evaluation_trajectory.json
-src/rfs_database/evaluation_history.csv
-src/rfs_database/last_evaluation_debug.log
-src/rfs_database/*_lock.txt
-src/rfs_database/*.lock
+src/afs_database/archive/
+src/afs_database/conversation_history.txt
+src/afs_database/evaluation_plot.png
+src/afs_database/evaluation_plot_bg.png
+src/afs_database/evaluation_trajectory.json
+src/afs_database/evaluation_history.csv
+src/afs_database/last_evaluation_debug.log
+src/afs_database/*_lock.txt
+src/afs_database/*.lock
 
 # IDE / OS
 .vscode/

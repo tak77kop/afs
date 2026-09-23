@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>afs_family</name>
+  <version>0.0.0</version>
+  <description>Family member node for AFS</description>
+  <maintainer email="hiranotaichi8@gmail.com">Taichi Hirano</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>afs_interfaces</exec_depend>
+  <exec_depend>python3-openai</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

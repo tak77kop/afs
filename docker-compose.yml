@@ -1,5 +1,5 @@
 ###############################################################################
-# RFS (Robot Family System) - Docker Compose
+# AFS (Agent Family System) - Docker Compose
 #
 # Usage:
 #   1. Copy docker/.env.example to .env and set your API keys
@@ -8,9 +8,9 @@
 ###############################################################################
 
 services:
-  rfs:
+  afs:
     build: .
-    container_name: rfs
+    container_name: afs
     ports:
       - "6080:6080"       # noVNC (browser access)
       - "6082:6082"       # Audio bridge WebSocket
@@ -22,10 +22,10 @@ services:
     env_file:
       - .env
     volumes:
-      - rfs-data:/home/ubuntu/rfs/src/rfs_database
+      - afs-data:/home/ubuntu/afs/src/afs_database
     shm_size: '256m'
     restart: unless-stopped
 
 volumes:
-  rfs-data:
-    name: rfs-session-data
+  afs-data:
+    name: afs-session-data

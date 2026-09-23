@@ -1,7 +1,7 @@
 /**
- * RFS Gradient Descent Simulation
+ * AFS Gradient Descent Simulation
  * Logic based on FACES IV Model documentation
- * Strictly synchronized with RFSTherapist node logic and visual mapping.
+ * Strictly synchronized with AFSTherapist node logic and visual mapping.
  */
 
 // Global State

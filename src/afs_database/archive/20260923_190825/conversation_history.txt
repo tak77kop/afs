@@ -1,0 +1,6 @@
+S0_T1,daughter,father,conversation,昔みたいにまた変な期待をさせないでよね、結局いつも最後には台無しになるんだから。,Vindemiatrix,Vindemiatrix,Normal,Daughter expresses cynical expectation based on past trauma.,1.0
+S0_T2,father,daughter,conversation,またそうやって勝手な解釈をして……俺だってやり直そうとしてるんだ、今日くらいは信じろよ。,Alnilam,Alnilam,Normal,"Father shows defensiveness and attempts to justify himself, failing to fully acknowledge the past hurt.",1.2
+S0_T3,daughter,father,conversation,信じろって……その言葉、何回目か分かってる？せめて今夜くらい、期待させないでよ。,Vindemiatrix,Vindemiatrix,Normal,Daughter expresses deep-seated skepticism and emotional fatigue regarding her father's promises.,1.2
+S0_T4,father,daughter,conversation,……ずっと過去のことばかり見てたら、今目の前にある温かい食事すら冷めちまうぞ。,Alnilam,Alnilam,Normal,"Father attempts to deflect the heavy emotional history by shifting focus to the present, however imperfect.",1.2
+S0_T5,daughter,father,conversation,冷めた食事より、私たちが何年もかけて冷めきったこの時間をどうする気なのよ。,Vindemiatrix,Vindemiatrix,Normal,"Daughter uses the cold meal as a metaphor for their lack of genuine connection, refusing to be distracted.",1.5
+S0_T6,father,daughter,conversation,「……何年もかかったんだ、この場所に来るまで。全部台無しにするつもりはないよ、俺だって。」,Alnilam,Alnilam,Normal,Father attempts to validate the gravity of the past while desperately trying to maintain the fragile present.,1.5

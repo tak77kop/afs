@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  rfs-evaluator:
+  afs-evaluator:
     build: .
-    container_name: rfs-evaluator
+    container_name: afs-evaluator
     ports:
       - "5001:5001"
     environment:
@@ -12,14 +12,14 @@ services:
     env_file:
       - .env
     volumes:
-      - rfs-data:/home/ubuntu/rfs/src/rfs_database
+      - afs-data:/home/ubuntu/afs/src/afs_database
     command: >
       bash -c "source /opt/ros/jazzy/setup.bash &&
-               source /home/ubuntu/rfs/install/setup.bash &&
-               ros2 run rfs_evaluator_app rfs_evaluator_app"
+               source /home/ubuntu/afs/install/setup.bash &&
+               ros2 run afs_evaluator_app afs_evaluator_app"
     restart: unless-stopped
 
 volumes:
-  rfs-data:
-    name: rfs-session-data
+  afs-data:
+    name: afs-session-data
     external: true

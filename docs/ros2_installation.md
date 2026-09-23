@@ -45,23 +45,23 @@ sudo rosdep init
 rosdep update
 ```
 
-## Setting up the RFS Workspace
-For this project, the cloned `rfs` repository serves as the ROS2 workspace itself.
+## Setting up the AFS Workspace
+For this project, the cloned `afs` repository serves as the ROS2 workspace itself.
 Simply clone and build the repository as follows:
 ```bash
 # Clone the repository to your home directory
 cd ~
-git clone https://github.com/robotaichi/rfs.git
-cd rfs
+git clone https://github.com/robotaichi/rfs.git afs
+cd afs
 
 # Build the workspace
 colcon build
 ```
-The RFS packages are located in the `src` directory, and you can proceed with development inside it.
+The AFS packages are located in the `src` directory, and you can proceed with development inside it.
 
 ## Detailed Configurations
-To ensure that built packages in your RFS workspace are automatically referenced when opening new terminals, add the workspace setup script to your `.bashrc` (using `~/rfs` or `$HOME/rfs` so that it remains compatible even if the username changes):
+To ensure that built packages in your AFS workspace are automatically referenced when opening new terminals, add the workspace setup script to your `.bashrc` (using `~/afs` or `$HOME/afs` so that it remains compatible even if the username changes):
 ```bash
-echo "source \$HOME/rfs/install/setup.bash" >> ~/.bashrc
+echo "source \$HOME/afs/install/setup.bash" >> ~/.bashrc
 ```
 This allows referencing the built packages inside the workspace immediately upon opening a terminal.

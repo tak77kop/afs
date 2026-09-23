@@ -1,5 +1,5 @@
 ###############################################################################
-# RFS (Robot Family System) - Docker Environment
+# AFS (Agent Family System) - Docker Environment
 # Ubuntu 24.04 + ROS2 Jazzy + XFCE4 + TigerVNC + noVNC
 # Access GUI via browser: http://localhost:6080
 ###############################################################################
@@ -55,7 +55,7 @@ RUN apt-get update && apt-get install -y \
     websockify \
     && rm -rf /var/lib/apt/lists/*
 
-# ─── Audio (PulseAudio) + RFS system dependencies ───────────────────────────
+# ─── Audio (PulseAudio) + AFS system dependencies ───────────────────────────
 RUN apt-get update && apt-get install -y \
     pulseaudio \
     alsa-utils \
@@ -66,7 +66,7 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# ─── Python dependencies for RFS ─────────────────────────────────────────────
+# ─── Python dependencies for AFS ─────────────────────────────────────────────
 RUN pip3 install --break-system-packages --ignore-installed \
     openai \
     google-genai \
@@ -98,10 +98,10 @@ RUN mkdir -p /home/ubuntu/.vnc \
     && echo "exec startxfce4" >> /home/ubuntu/.vnc/xstartup \
     && chmod +x /home/ubuntu/.vnc/xstartup
 
-# ─── Copy RFS source and build ───────────────────────────────────────────────
-COPY --chown=ubuntu:ubuntu . /home/ubuntu/rfs
+# ─── Copy AFS source and build ───────────────────────────────────────────────
+COPY --chown=ubuntu:ubuntu . /home/ubuntu/afs
 
-WORKDIR /home/ubuntu/rfs
+WORKDIR /home/ubuntu/afs
 
 # Source ROS2 and build the workspace
 RUN /bin/bash -c "source /opt/ros/jazzy/setup.bash && colcon build"
@@ -110,20 +110,20 @@ RUN /bin/bash -c "source /opt/ros/jazzy/setup.bash && colcon build"
 RUN echo "" >> /home/ubuntu/.bashrc \
     && echo "# ROS2 Jazzy" >> /home/ubuntu/.bashrc \
     && echo "source /opt/ros/jazzy/setup.bash" >> /home/ubuntu/.bashrc \
-    && echo "source /home/ubuntu/rfs/install/setup.bash" >> /home/ubuntu/.bashrc
+    && echo "source /home/ubuntu/afs/install/setup.bash" >> /home/ubuntu/.bashrc
 
-# ─── Desktop shortcut for RFS launch ─────────────────────────────────────────
+# ─── Desktop shortcut for AFS launch ─────────────────────────────────────────
 RUN mkdir -p /home/ubuntu/Desktop \
     && echo "[Desktop Entry]\n\
     Version=1.0\n\
     Type=Application\n\
-    Name=RFS Launch\n\
-    Comment=Start Robot Family System\n\
-    Exec=xterm -fa 'Monospace' -fs 12 -hold -e bash -c 'source /home/ubuntu/rfs/install/setup.bash && ros2 launch rfs_bringup rfs_all.launch.py'\n\
+    Name=AFS Launch\n\
+    Comment=Start Agent Family System\n\
+    Exec=xterm -fa 'Monospace' -fs 12 -hold -e bash -c 'source /home/ubuntu/afs/install/setup.bash && ros2 launch afs_bringup afs_all.launch.py'\n\
     Icon=utilities-terminal\n\
     Terminal=false\n\
-    Categories=Application;" > /home/ubuntu/Desktop/rfs-launch.desktop \
-    && chmod +x /home/ubuntu/Desktop/rfs-launch.desktop
+    Categories=Application;" > /home/ubuntu/Desktop/afs-launch.desktop \
+    && chmod +x /home/ubuntu/Desktop/afs-launch.desktop
 
 # ─── Entrypoint ──────────────────────────────────────────────────────────────
 COPY --chown=ubuntu:ubuntu docker/entrypoint.sh /home/ubuntu/entrypoint.sh

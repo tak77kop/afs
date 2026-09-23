@@ -45,23 +45,23 @@ sudo rosdep init
 rosdep update
 ```
 
-## RFSのワークスペースのセットアップ
-本プロジェクトでは、クローンした `rfs` リポジトリ自体がROS2ワークスペースとなります。
+## AFSのワークスペースのセットアップ
+本プロジェクトでは、クローンした `afs` リポジトリ自体がROS2ワークスペースとなります。
 以下のようにして、リポジトリをクローンしてビルドします。
 ```bash
 # ホームディレクトリにリポジトリをクローン
 cd ~
-git clone https://github.com/robotaichi/rfs.git
-cd rfs
+git clone https://github.com/robotaichi/rfs.git afs
+cd afs
 
 # ワークスペースをビルド
 colcon build
 ```
-RFSのパッケージ群は `src` ディレクトリ以下に配置されていますので、そのまま開発を進めていくことができます。
+AFSのパッケージ群は `src` ディレクトリ以下に配置されていますので、そのまま開発を進めていくことができます。
 
 ## 細かい設定
-このままでも開発はできますが、新しいターミナルを開くたびに `setup.bash` が読み込まれる方が便利ですので、以下のコマンドを実行してください（ユーザ名が変わっても対応できるよう、`$HOME/rfs` または `~/rfs` を使用します）。
+このままでも開発はできますが、新しいターミナルを開くたびに `setup.bash` が読み込まれる方が便利ですので、以下のコマンドを実行してください（ユーザ名が変わっても対応できるよう、`$HOME/afs` または `~/afs` を使用します）。
 ```bash
-echo "source \$HOME/rfs/install/setup.bash" >> ~/.bashrc
+echo "source \$HOME/afs/install/setup.bash" >> ~/.bashrc
 ```
 これにより、新しいターミナルを開いたときに、srcディレクトリ内のビルド済みパッケージが自動的に参照されるようになります。

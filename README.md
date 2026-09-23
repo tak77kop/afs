@@ -1,8 +1,8 @@
 [**English**](README.md) | [**日本語**](README.ja.md)
 
-# RFS: Robot Family System
+# AFS: Agent Family System
 
-RFS (Robot Family System) is a robot family system that aims to realize a "new family" composed of a person and robots (agents) such as father robots, mother robots, and daughter robots. By interacting with a robot family, a person feels a sense of warmth and a secure base, aiming to eventually reduce feelings of isolation and loneliness. It implements a multi-agent system that performs family-like conversations and behaviors using ROS2 and LLM. The user can intervene at any time by speaking into a microphone during the robot family's conversation. In order to make the robot family's conversation more like that of a human family, RFS adjusts the behavior of the robot family based on Olson's Circumplex Model and its evaluation scale, FACES IV. Specifically, it visualizes the current state of the robot family by plotting it on Olson's Circumplex Model, and in the case of unbalanced types, uses Gradient Descent to approach an ideal balanced type of family. These adjustments are performed by a therapist node (agent) separate from the robot family members.
+AFS (Agent Family System) is an agent family system that aims to realize a "new family" composed of a person and robots (agents) such as father robots, mother robots, and daughter robots. By interacting with a robot family, a person feels a sense of warmth and a secure base, aiming to eventually reduce feelings of isolation and loneliness. It implements a multi-agent system that performs family-like conversations and behaviors using ROS2 and LLM. The user can intervene at any time by speaking into a microphone during the robot family's conversation. In order to make the robot family's conversation more like that of a human family, AFS adjusts the behavior of the robot family based on Olson's Circumplex Model and its evaluation scale, FACES IV. Specifically, it visualizes the current state of the robot family by plotting it on Olson's Circumplex Model, and in the case of unbalanced types, uses Gradient Descent to approach an ideal balanced type of family. These adjustments are performed by a therapist node (agent) separate from the robot family members.
 
 This project is developed as part of the research at the **Fumihide Tanaka Laboratory** at the University of Tsukuba. Our lab mainly focuses on HRI (Human-Robot Interaction), conducting research to create intelligent agent technologies that are always by our side and help us in our lives.
 
@@ -17,7 +17,7 @@ This project is developed as part of the research at the **Fumihide Tanaka Labor
 
 ## 🏗 System Architecture & Processing Flow
 
-RFS operates in a closed-loop cycle where the **Therapist Node** (`rfs_therapist`) leads the robot family members toward a balanced type according to Olson's Circumplex Model. **The Person (User)** can intervene in the robot family's conversation at any time to influence it.
+AFS operates in a closed-loop cycle where the **Therapist Node** (`afs_therapist`) leads the robot family members toward a balanced type according to Olson's Circumplex Model. **The Person (User)** can intervene in the robot family's conversation at any time to influence it.
 
 ![System Architecture](docs/images/architecture.png)
 
@@ -25,13 +25,13 @@ RFS operates in a closed-loop cycle where the **Therapist Node** (`rfs_therapist
 
 | Node | Responsibility | Key Function |
 | :--- | :--- | :--- |
-| **`rfs_family`** | Robot Family Node | Simulates robot family personalities (Father, Mother, Daughter, etc.) using LLM. |
-| **`rfs_tts`** | Text-to-Speech Node | Performs speech synthesis using Gemini Live for robot family members. |
-| **`rfs_toio`** | Toio Robot Node| Assigns robot family members to each [toio™](https://toio.io/) robot to enable physical movement. |
-| **`rfs_therapist`** | Therapist Node | Guides the robot family toward the balanced type using Gradient Descent. |
-| **`rfs_viewer`** | Circumplex Model Visualization Node | Plots the state (trajectory) of the robot family on the Circumplex Model. |
-| **`rfs_evaluation`** | FACES IV Evaluation Node | Evaluates FACES IV based on the robot family's conversation logs. |
-| **`rfs_stt`** | Speech-to-Text Node | Performs real-time speech recognition for human intervention using Gemini Live. |
+| **`afs_family`** | Robot Family Node | Simulates robot family personalities (Father, Mother, Daughter, etc.) using LLM. |
+| **`afs_tts`** | Text-to-Speech Node | Performs speech synthesis using Gemini Live for robot family members. |
+| **`afs_toio`** | Toio Robot Node| Assigns robot family members to each [toio™](https://toio.io/) robot to enable physical movement. |
+| **`afs_therapist`** | Therapist Node | Guides the robot family toward the balanced type using Gradient Descent. |
+| **`afs_viewer`** | Circumplex Model Visualization Node | Plots the state (trajectory) of the robot family on the Circumplex Model. |
+| **`afs_evaluation`** | FACES IV Evaluation Node | Evaluates FACES IV based on the robot family's conversation logs. |
+| **`afs_stt`** | Speech-to-Text Node | Performs real-time speech recognition for human intervention using Gemini Live. |
 
 ### Sequence Diagrams
 
@@ -41,30 +41,30 @@ The following diagrams show the ROS2 topic/service traffic between nodes for the
 
 ```mermaid
 sequenceDiagram
-    participant Launch as rfs_bringup (launch all)
-    participant Leader as rfs_family_member (speaker)
-    participant Doc as rfs_document_processor
-    participant Gen as rfs_generator
-    participant TTS as rfs_tts
-    participant Toio as rfs_toio
-    participant Next as rfs_family_member (next speaker)
+    participant Launch as afs_bringup (launch all)
+    participant Leader as afs_family_member (speaker)
+    participant Doc as afs_document_processor
+    participant Gen as afs_generator
+    participant TTS as afs_tts
+    participant Toio as afs_toio
+    participant Next as afs_family_member (next speaker)
 
     Launch->>Launch: Elect initial speaker (Gemini vote)
-    Launch->>Leader: ros2 run rfs_family rfs_family_member --initiate
-    TTS-->>Leader: rfs_tts_initialization "tts_initialized"
-    Toio-->>Leader: rfs_toio_status "toios_ready"
-    Leader->>Doc: rfs_behavioral_info_request / rfs_few_shot_request
-    Doc-->>Leader: rfs_behavioral_info_results / rfs_few_shot_results
-    Leader->>Gen: rfs_generator_request (role, history, clinical guidelines)
+    Launch->>Leader: ros2 run afs_family afs_family_member --initiate
+    TTS-->>Leader: afs_tts_initialization "tts_initialized"
+    Toio-->>Leader: afs_toio_status "toios_ready"
+    Leader->>Doc: afs_behavioral_info_request / afs_few_shot_request
+    Doc-->>Leader: afs_behavioral_info_results / afs_few_shot_results
+    Leader->>Gen: afs_generator_request (role, history, clinical guidelines)
     Gen->>Gen: Build prompt, call Gemini API
-    Gen-->>Leader: rfs_generator_results (dialogue/move CSV line)
+    Gen-->>Leader: afs_generator_results (dialogue/move CSV line)
     Leader->>Leader: append line to conversation_history.txt
-    Leader->>TTS: rfs_speak_text (service call)
-    Leader->>Next: rfs_family_actions "prepare_turn" (early pre-generation)
-    TTS-->>Leader: rfs_tts_status "start" / rfs_tts_finished "finished"
-    Leader->>Toio: rfs_toio_move_script (if move != none)
-    Toio-->>Leader: rfs_toio_move_finished
-    Leader->>Next: rfs_family_actions "start_turn"
+    Leader->>TTS: afs_speak_text (service call)
+    Leader->>Next: afs_family_actions "prepare_turn" (early pre-generation)
+    TTS-->>Leader: afs_tts_status "start" / afs_tts_finished "finished"
+    Leader->>Toio: afs_toio_move_script (if move != none)
+    Toio-->>Leader: afs_toio_move_finished
+    Leader->>Next: afs_family_actions "start_turn"
 ```
 
 #### 2. Periodic FACES IV Evaluation Cycle
@@ -73,27 +73,27 @@ Every `turns_per_step` conversation turns, the Therapist node pauses the convers
 
 ```mermaid
 sequenceDiagram
-    participant Member as rfs_family_member (each member)
-    participant Ther as rfs_therapist
-    participant MEval as rfs_member_evaluator
-    participant Eval as rfs_evaluator
-    participant Opt as rfs_optimizer
-    participant Viewer as rfs_viewer
+    participant Member as afs_family_member (each member)
+    participant Ther as afs_therapist
+    participant MEval as afs_member_evaluator
+    participant Eval as afs_evaluator
+    participant Opt as afs_optimizer
+    participant Viewer as afs_viewer
 
-    Member->>Ther: rfs_trigger_evaluation (step boundary reached)
-    Ther->>Member: rfs_request_member_evaluation
-    Member->>MEval: rfs_member_eval_request (own conversation history)
+    Member->>Ther: afs_trigger_evaluation (step boundary reached)
+    Ther->>Member: afs_request_member_evaluation
+    Member->>MEval: afs_member_eval_request (own conversation history)
     MEval->>MEval: Call Gemini API (62-item FACES IV self-rating)
-    MEval-->>Ther: rfs_member_evaluation_results
+    MEval-->>Ther: afs_member_evaluation_results
     Note over Ther: Waits until every family member has responded
-    Ther->>Eval: rfs_evaluator_request (aggregated ratings)
+    Ther->>Eval: afs_evaluator_request (aggregated ratings)
     Eval->>Eval: Average the ratings, convert to percentiles, then to coordinates x and y
-    Eval->>Opt: rfs_optimizer_request
+    Eval->>Opt: afs_optimizer_request
     Opt->>Opt: Gradient descent to get the next target tx and ty
-    Opt-->>Ther: rfs_evaluator_results (x, y, tx, ty, ratios, ...)
+    Opt-->>Ther: afs_evaluator_results (x, y, tx, ty, ratios, ...)
     Ther->>Ther: log evaluation_history.csv, update trajectory, render plot
-    Ther-->>Viewer: rfs_faces_plot_updated (plot image path)
-    Ther->>Member: rfs_evaluation_complete
+    Ther-->>Viewer: afs_faces_plot_updated (plot image path)
+    Ther->>Member: afs_evaluation_complete
     Note over Member: Leader resumes the conversation with the next speaker
 ```
 
@@ -102,28 +102,28 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant STT as rfs_stt
-    participant Members as rfs_family_member (all)
-    participant TTS as rfs_tts
+    participant STT as afs_stt
+    participant Members as afs_family_member (all)
+    participant TTS as afs_tts
 
     User->>STT: speaks into microphone (VAD detects speech)
-    STT-->>Members: rfs_user_intervention "user_speech_started"
-    Members->>TTS: rfs_interrupt_tts "stop_all"
+    STT-->>Members: afs_user_intervention "user_speech_started"
+    Members->>TTS: afs_interrupt_tts "stop_all"
     STT->>STT: transcribe recorded audio via Gemini API
-    STT-->>Members: rfs_user_intervention "user_speech_transcribed:<text>"
+    STT-->>Members: afs_user_intervention "user_speech_transcribed:<text>"
     Members->>Members: each member casts a vote (Gemini API) for who should respond
-    Members-->>STT: rfs_responder_vote
+    Members-->>STT: afs_responder_vote
     STT->>STT: tally votes (majority; ties broken by family_config order)
-    STT-->>Members: rfs_user_intervention "user_decision:<responder>"
+    STT-->>Members: afs_user_intervention "user_decision:<responder>"
     Note over Members: only the selected member responds; the rest stay paused
-    Members->>Members: rfs_intervention_resolved (unlock, resume normal turns)
+    Members->>Members: afs_intervention_resolved (unlock, resume normal turns)
 ```
 
 ## 🚀 Getting Started
 
 ### 🖥 Native Install (Ubuntu 24.04 only) (Recommended)
 
-If you prefer to run RFS directly on Ubuntu without Docker:
+If you prefer to run AFS directly on Ubuntu without Docker:
 
 #### Prerequisites
 - **OS**: Ubuntu 24.04 (Noble Numbat)
@@ -147,16 +147,16 @@ pip install openai google-genai numpy sounddevice webrtcvad matplotlib toio-py P
 1. **Clone & Build**:
    ```bash
    cd ~
-   git clone https://github.com/robotaichi/rfs.git
-   cd rfs
+   git clone https://github.com/robotaichi/rfs.git afs
+   cd afs
    colcon build
    source install/setup.bash
    ```
 
-2. **🚀 Launch RFS (Core Command)**:
+2. **🚀 Launch AFS (Core Command)**:
    Once the API keys are configured (see the **Configuration** section below), launch the entire system using the following main command:
    ```bash
-   ros2 launch rfs_bringup rfs_all.launch.py
+   ros2 launch afs_bringup afs_all.launch.py
    ```
 
 ---
@@ -164,7 +164,7 @@ pip install openai google-genai numpy sounddevice webrtcvad matplotlib toio-py P
 <details>
 <summary><strong>🐳 Docker Quick Start (Not Recommended / Deprecated)</strong></summary>
 
-**The easiest way to try RFS.** No Ubuntu or ROS2 installation required — works on **Windows, Mac, and Linux** via your browser.
+**The easiest way to try AFS.** No Ubuntu or ROS2 installation required — works on **Windows, Mac, and Linux** via your browser.
 
 > [!WARNING]
 > **Audio I/O Limitation**: In the Docker environment, microphone (STT) and speaker (TTS) functions only work fully on Linux hosts. On Windows / Mac, audio device passthrough is not supported, so audio features will not be available. Core features such as text-based LLM interaction and FACES IV visualization work on all platforms.
@@ -179,8 +179,8 @@ pip install openai google-genai numpy sounddevice webrtcvad matplotlib toio-py P
 
 **2. Setup**
 ```bash
-git clone https://github.com/robotaichi/rfs.git
-cd rfs
+git clone https://github.com/robotaichi/rfs.git afs
+cd afs
 
 # Set API keys
 cp docker/.env.example .env
@@ -199,17 +199,17 @@ nano .env  # Enter OPENAI_API_KEY and GEMINI_API_KEY
 docker compose up --build
 ```
 
-![Docker build complete](docs/images/rfs_docker_build.png)
+![Docker build complete](docs/images/afs_docker_build.png)
 
 **3. Access from Browser**
 
 Open **http://localhost:6080/vnc.html** in your browser, click **"Connect"**, and you'll see the XFCE desktop environment.
 
-![RFS running in Docker via noVNC](docs/images/rfs_docker.png)
+![AFS running in Docker via noVNC](docs/images/afs_docker.png)
 
 **4. Enable Audio (Windows/Mac only)**
 
-Open **http://localhost:6083** in a separate browser tab and click **"🔊 Connect Audio"**. Keep this tab open while using RFS — it bridges audio between the Docker container and your browser for TTS and STT.
+Open **http://localhost:6083** in a separate browser tab and click **"🔊 Connect Audio"**. Keep this tab open while using AFS — it bridges audio between the Docker container and your browser for TTS and STT.
 
 > [!NOTE]
 > On Linux, you can use native audio passthrough instead:
@@ -217,11 +217,11 @@ Open **http://localhost:6083** in a separate browser tab and click **"🔊 Conne
 > docker compose -f docker-compose.yml -f docker-compose.linux.yml up --build
 > ```
 
-**5. Launch RFS**
-- Double-click the **"RFS Launch"** icon on the desktop
+**5. Launch AFS**
+- Double-click the **"AFS Launch"** icon on the desktop
 - Or open a terminal and run:
   ```bash
-  ros2 launch rfs_bringup rfs_all.launch.py
+  ros2 launch afs_bringup afs_all.launch.py
   ```
 
 **6. Stop**
@@ -243,18 +243,18 @@ docker compose up
 | :--- | :--- |
 | Start (foreground) | `docker compose up` |
 | Start (background) | `docker compose up -d` |
-| View logs | `docker logs rfs` |
+| View logs | `docker logs afs` |
 | Stop | `docker compose down` |
 | Update & Rebuild | `git pull origin main && docker compose build` |
 | Rebuild after code changes | `docker compose up --build` |
-| Enter container shell | `docker exec -it rfs bash` |
+| Enter container shell | `docker exec -it afs bash` |
 
 | Setting | Details |
 | :--- | :--- |
 | **Browser Access** | `http://localhost:6080/vnc.html` |
 | **Change Resolution** | Modify `VNC_RESOLUTION` in `.env` (Default: `1920x1080`) |
 | **Set VNC Password** | Set `VNC_PASSWORD` in `.env` |
-| **Session Data** | Auto-saved to Docker Volume `rfs-session-data` |
+| **Session Data** | Auto-saved to Docker Volume `afs-session-data` |
 
 **🔧 Troubleshooting**
 
@@ -275,15 +275,15 @@ If you plan to place speakers on top of [toio™](https://toio.io/) robots for p
 2.  **Speaker Pairing**: Pair all Bluetooth speakers you intend to use with your Ubuntu PC and ensure they are "Connected".
 3.  **Run Mapping Script**: 
     ```bash
-    cd ~/rfs
-    python3 src/rfs_toio/rfs_toio/toio_speaker_match.py
+    cd ~/afs
+    python3 src/afs_toio/afs_toio/toio_speaker_match.py
     ```
 3.  **Role Assignment (Sequential)**: When you run the script, one of the speakers will announce "Speaker [Role Name]. Please place this speaker on the rotating Toio." Immediately after the announcement, the corresponding toio™ cube will rotate; place that specific speaker onto the moving toio™. As the next speaker plays its audio, repeat this process for each remaining speaker.
 4.  **Save Configuration**: Once all pairs are confirmed, the IDs will be automatically saved to `config.json`.
 
 ### Configuration
 
-Before starting RFS, you need to set a valid API key to use the LLM. To persist the settings, add them to your `~/.bashrc`:
+Before starting AFS, you need to set a valid API key to use the LLM. To persist the settings, add them to your `~/.bashrc`:
 
 ```bash
 # 1. Open .bashrc
@@ -300,15 +300,15 @@ source ~/.bashrc
 - [**`OPENAI_API_KEY`**](https://platform.openai.com/api-keys): Essential for LLM-based dialogue generation and psychological mapping.
 - [**`GEMINI_API_KEY`**](https://aistudio.google.com/app/apikey): Required for Gemini Live-based audio transcription (STT) and low-latency speech generation (TTS).
 
-2. **Launch RFS (Launch all necessary nodes at once)**:
+2. **Launch AFS (Launch all necessary nodes at once)**:
    ```bash
-   ros2 launch rfs_bringup rfs_all.launch.py
+   ros2 launch afs_bringup afs_all.launch.py
    ```
 
 ## ⚙️ Settings
 
 ### `config.json` Specification
-Located in `src/rfs_config/config/config.json`.
+Located in `src/afs_config/config/config.json`.
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
@@ -567,7 +567,7 @@ The resulting vector adjusts the behavior (conversation content, etc.) for indiv
 A specialized web application for external researchers to validate the LLM-generated FACES-IV evaluations against human expert knowledge.
 
 ### Features
-- **Archive Viewer**: Browse past experimental sessions stored in `src/rfs_database/archive/`.
+- **Archive Viewer**: Browse past experimental sessions stored in `src/afs_database/archive/`.
 - **Conversation Context**: View the full conversation history alongside the questionnaire.
 - **Evaluation Form**: Fill out the FACES-IV questionnaire (62 items) as a human expert.
 - **Comparison**: Compare human scores with the robot's self-evaluations.
@@ -577,18 +577,18 @@ A specialized web application for external researchers to validate the LLM-gener
 
 **Option 1: Using ROS2 Run (Recommended)**
 ```bash
-ros2 run rfs_evaluator_app rfs_evaluator_app
+ros2 run afs_evaluator_app afs_evaluator_app
 ```
 
 **Option 2: Direct Python Execution**
 ```bash
-python3 src/rfs_evaluator_app/rfs_evaluator_app/app.py
+python3 src/afs_evaluator_app/afs_evaluator_app/app.py
 ```
 
 Once launched, open **http://localhost:5001** in your browser.
 
 ## 💾 Data Persistence & Archival
-Upon terminating the simulation (`Ctrl+C`), RFS automatically archives session logs (conversation history, evaluations, and trajectories) under `src/rfs_database/archive/`.
+Upon terminating the simulation (`Ctrl+C`), AFS automatically archives session logs (conversation history, evaluations, and trajectories) under `src/afs_database/archive/`.
 
 ## 📜 License
 This project is licensed under the MIT License.

@@ -33,15 +33,15 @@ Thumbs.db
 *.swp
 *.swo
 
-# Project specific dynamic data (rfs_database contents)
+# Project specific dynamic data (afs_database contents)
 # We might want to keep some initial data, but generally history and logs are ignored.
-src/rfs_database/conversation_history.txt
-src/rfs_database/evaluation_trajectory.json
-src/rfs_database/evaluation_plot.png
-src/rfs_database/evaluation_plot_bg.png
-src/rfs_database/*_lock.txt
-src/rfs_database/*.lock
-src/rfs_database/faces_iv_summary.md
+src/afs_database/conversation_history.txt
+src/afs_database/evaluation_trajectory.json
+src/afs_database/evaluation_plot.png
+src/afs_database/evaluation_plot_bg.png
+src/afs_database/*_lock.txt
+src/afs_database/*.lock
+src/afs_database/faces_iv_summary.md
 
 # Config secrets
 OPENAI_API_KEY
