@@ -115,7 +115,7 @@ sequenceDiagram
     Members-->>STT: afs_responder_vote
     STT->>STT: tally votes (majority, ties broken by family_config order)
     STT-->>Members: afs_user_intervention 'user_decision:&lt;responder&gt;'
-    Note over Members: only the selected member responds; the rest stay paused
+    Note over Members: only the selected member responds, the rest stay paused
     Members->>Members: afs_intervention_resolved (unlock, resume normal turns)
 ```
 
