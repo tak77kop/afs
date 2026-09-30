@@ -55,18 +55,6 @@ class GeminiTTS:
                 self.logger.warn(f"Invalid voice '{voice}' requested. Defaulting to 'Kore'.")
                 voice = "Kore"
 
-            def _get_config():
-                return types.GenerateContentConfig(
-                    response_modalities=["AUDIO"],
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                voice_name=voice,
-                            )
-                        )
-                    ),
-                )
-
             # Allow parallel synthesis (unwrapped by semaphores)
             audio_data = None
             last_error = None

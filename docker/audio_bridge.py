@@ -101,7 +101,6 @@ def setup_pulseaudio_virtual_devices():
 # ── Audio Output: PulseAudio Monitor → WebSocket ─────────────────────────────
 async def audio_output_loop():
     """Capture PulseAudio output via parec and broadcast to WebSocket clients."""
-    global output_clients
     while True:
         if len(output_clients) == 0:
             await asyncio.sleep(0.2)
