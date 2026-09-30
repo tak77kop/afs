@@ -19,7 +19,7 @@ This project is developed as part of the research at the **Fumihide Tanaka Labor
 
 AFS operates in a closed-loop cycle where the **Therapist Node** (`afs_therapist`) leads the robot family members toward a balanced type according to Olson's Circumplex Model. **The Person (User)** can intervene in the robot family's conversation at any time to influence it.
 
-![System Architecture](docs/images/architecture.png)
+![System Architecture](docs/images/architecture.jpg)
 
 ### Detailed Node Responsibilities
 
