@@ -19,7 +19,7 @@ AFS (Agent Family System) は、父親ロボット・母親ロボット・娘ロ
 
 AFSは、**セラピストノード** (`afs_therapist`) がOlsonの家族円環モデルに基づいてロボット家族メンバーをバランスタイプへと導くクローズドループ・サイクルで動作します。**人（ユーザ）** はいつでもロボット家族の会話に介入し、影響を与えることができます。
 
-![System Architecture](docs/images/architecture.png)
+![System Architecture](docs/images/architecture.jpg)
 
 ### ノードごとの詳細な役割
 
@@ -77,7 +77,7 @@ sequenceDiagram
     participant Ther as afs_therapist
     participant MEval as afs_member_evaluator
     participant Eval as afs_evaluator
-    participant Opt as afs_optimizer
+    participant Optm as afs_optimizer
     participant Viewer as afs_viewer
 
     Member->>Ther: afs_trigger_evaluation (ステップ境界に到達)
@@ -88,9 +88,9 @@ sequenceDiagram
     Note over Ther: 全メンバー分の応答が揃うまで待機
     Ther->>Eval: afs_evaluator_request (集約された評価値)
     Eval->>Eval: 評価値を平均し、パーセンタイルに変換してから座標xとyを算出
-    Eval->>Opt: afs_optimizer_request
-    Opt->>Opt: 勾配降下法で次回目標座標txとtyを算出
-    Opt-->>Ther: afs_evaluator_results (x, y, tx, ty, 比率など)
+    Eval->>Optm: afs_optimizer_request
+    Optm->>Optm: 勾配降下法で次回目標座標txとtyを算出
+    Optm-->>Ther: afs_evaluator_results (x, y, tx, ty, 比率など)
     Ther->>Ther: evaluation_history.csv記録、軌跡更新、プロット画像生成
     Ther-->>Viewer: afs_faces_plot_updated (プロット画像パス)
     Ther->>Member: afs_evaluation_complete
