@@ -1,12 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-FACES-IV Validation Web App
-For external family psychology researchers to validate LLM-generated FACES-IV evaluations.
+FACES-IV Validation Web App.
+Used by external family psychology researchers to validate LLM-generated FACES-IV assessments.
 
-This file only handles the Flask app itself (routing). ROS2-independent logic
-such as the FACES-IV item definitions and conversation history/evaluation CSV
-parsing has been split out into `faces_data` (the logic layer).
+This file handles only the Flask web application itself (routing). ROS2-independent
+logic, such as FACES-IV item definitions and parsing conversation history or
+evaluation CSVs, is delegated to `faces_data` (logic layer).
+
+Purpose of this app: It is not part of the active robot runtime. It reads archives
+left by completed sessions, presents evaluators with the exact dialogue observed by
+the LLM, and records the human evaluator's own FACES-IV scores alongside the LLM's scores.
+Comparing these two columns constitutes the validation of the LLM assessments.
+
+Routes:
+  GET  /                   Single-page UI
+  GET  /api/archives       Archive folders containing both required files
+  GET  /api/archive/<name> Single archive: conversation, LLM scores, item list
+  POST /api/save_csv       Write human evaluator scores alongside LLM scores
+  POST /api/open_file      Open saved file in the OS file manager
+
+Runs on port 5001 and has no runtime ROS2 dependencies, allowing it to be used
+on separate machines from the experimental robot setup.
 """
 
 import os
@@ -24,34 +39,34 @@ from afs_evaluator_app.faces_data import (
     parse_conversation_line,
 )
 
-# ── Paths ────────────────────────────────────────────────────────────────────
+# -- Paths -------------------------------------------------------------------
 from ament_index_python.packages import get_package_share_directory
 
 try:
     PACKAGE_SHARE_DIR = get_package_share_directory('afs_evaluator_app')
     STATIC_DIR = os.path.join(PACKAGE_SHARE_DIR, 'static')
     TEMPLATE_DIR = os.path.join(PACKAGE_SHARE_DIR, 'templates')
-    # Default archive dir logic: try to find it relative to source if running from source,
-    # or use a standard path if installed.
-    # Creating a robust fallback for archive dir:
-    # 1. Check relative to user home (safest for this environment)
-    # 2. Check relative to package location (source)
+    # Determine default archive directory: look relative to source if running in place,
+    # or use standard package path if installed.
+    # Robust fallback strategy:
+    # 1. Check relative to user home directory (safest in this environment)
+    # 2. Check relative to package location (source tree)
 
-    # Try user home structure first (most likely for this setup)
+    # First attempt user home configuration (most likely pattern in this setup)
     POSSIBLE_ARCHIVE_DIR = os.path.join(os.path.expanduser("~"), "afs", "src", "afs_database", "archive")
     if os.path.isdir(POSSIBLE_ARCHIVE_DIR):
         ARCHIVE_DIR = POSSIBLE_ARCHIVE_DIR
     else:
-        # Fallback to relative to this file (development mode)
+        # Fallback relative to this file (development mode)
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         ARCHIVE_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "..", "..", "afs_database", "archive"))
 
 except Exception as e:
-    # Fallback for direct python execution without ROS2 environment
+    # Fallback when running directly with Python outside a ROS2 environment
     print(f"[WARN] Could not resolve ROS2 package share directory: {e}")
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    # Assuming standard source layout: src/afs_evaluator_app/afs_evaluator_app/app.py
-    # So static is at src/afs_evaluator_app/static -> ../../static
+    # Expected standard source layout: src/afs_evaluator_app/afs_evaluator_app/app.py
+    # meaning static is src/afs_evaluator_app/static -> ../../static
     PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
     STATIC_DIR = os.path.join(PROJECT_ROOT, "static")
     TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "templates")
@@ -60,10 +75,11 @@ except Exception as e:
 app = Flask(__name__, static_folder=STATIC_DIR, template_folder=TEMPLATE_DIR)
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# -- Routes ------------------------------------------------------------------
 
 @app.route("/")
 def index():
+    """Serve single-page UI. All subsequent data is retrieved via /api routes."""
     return render_template("index.html")
 
 
@@ -74,14 +90,17 @@ def list_archives():
         return jsonify({"archives": []})
 
     archives = []
+    # reverse=True: folder names are timestamps, so newest sessions appear first
+    # (what researchers typically want to inspect).
     for name in sorted(os.listdir(ARCHIVE_DIR), reverse=True):
         path = os.path.join(ARCHIVE_DIR, name)
         if os.path.isdir(path):
-            # Check required files exist
+            # Verify required files exist. Sessions aborted early may have plots
+            # but lack evaluation scores; exclude them since they cannot be validated.
             has_conv = os.path.isfile(os.path.join(path, "conversation_history.txt"))
             has_eval = os.path.isfile(os.path.join(path, "evaluation_history.csv"))
             if has_conv and has_eval:
-                # Parse timestamp for display
+                # Parse timestamp for display ("20260213_184820" -> "2026-02-13 18:48:20")
                 try:
                     dt = datetime.strptime(name, "%Y%m%d_%H%M%S")
                     display = dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -93,7 +112,11 @@ def list_archives():
 
 @app.route("/api/archive/<name>")
 def get_archive(name: str):
-    """Load and return parsed archive data."""
+    """Load and return parsed archive data.
+
+    Returns all data needed by the UI in a single response: session-split
+    conversations, LLM scores, 62 item texts, and subscale groupings.
+    """
     archive_path = os.path.join(ARCHIVE_DIR, name)
     if not os.path.isdir(archive_path):
         return jsonify({"error": "Archive not found"}), 404
@@ -114,11 +137,13 @@ def get_archive(name: str):
     # Parse evaluation scores
     sessions_eval = parse_evaluation_csv(eval_path)
 
-    # Build session list (ordered)
+    # Assemble sorted session list. Use union of both sources since a session
+    # may have conversation without scores or vice-versa. Sort numerically by
+    # integer after 'S' so S10 does not sort before S2.
     all_sessions = sorted(set(list(sessions_conv.keys()) + list(sessions_eval.keys())),
                           key=lambda s: int(s[1:]))
 
-    # Build FACES items list
+    # Assemble FACES item list
     items = [{"num": k, "text": v, "subscale": get_subscale(k)} for k, v in FACES_ITEMS.items()]
 
     return jsonify({
@@ -133,11 +158,18 @@ def get_archive(name: str):
 
 @app.route("/api/save_csv", methods=["POST"])
 def save_csv():
-    """Save evaluator's scores as CSV."""
+    """Save evaluator scores as CSV.
+
+    Writes one file per session directly into the archive directory so human
+    evaluations remain co-located with their corresponding session.
+    Each row contains item text, per-member LLM scores, LLM mean, and human
+    evaluator scores for direct side-by-side comparison.
+    """
     import csv
 
     data = request.json
     archive_name = data.get("archive_name")
+    # File naming element distinguishing files from different evaluators
     evaluator_name = data.get("evaluator_name", "anonymous")
     results = data.get("results", {})  # {session_id: {item_num: score}}
 
@@ -160,7 +192,7 @@ def save_csv():
         mean_scores = robot_data["mean"]
         member_names = sorted(members.keys())
 
-        # Build CSV
+        # Assemble CSV
         filename = f"human_evaluation_{session_id}_{evaluator_name}.csv"
         filepath = os.path.join(archive_path, filename)
 
@@ -169,6 +201,8 @@ def save_csv():
             header = ["Item", "Item_Text", "Subscale"] + member_names + ["robot_mean", "evaluator"]
             writer.writerow(header)
 
+            # Always write all 62 items including unanswered ones to maintain
+            # consistent schema for automated downstream analysis.
             for item_num in range(1, 63):
                 item_key = str(item_num)
                 row = [
@@ -190,7 +224,11 @@ def save_csv():
 
 @app.route("/api/open_file", methods=["POST"])
 def open_file():
-    """Open file in OS file explorer with the file selected."""
+    """Open file in native OS file explorer with target selected.
+
+    Convenience feature for evaluators: archive paths are long, so the app
+    reveals the file directly. Branching handles OS-specific command differences.
+    """
     data = request.json
     filepath = data.get("filepath", "")
 
@@ -211,8 +249,13 @@ def open_file():
         return jsonify({"error": str(e)}), 500
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main --------------------------------------------------------------------
 def main():
+    """Entry point for `ros2 run afs_evaluator_app afs_evaluator_app`.
+
+    host="0.0.0.0" allows access from external machines on the same local network
+    in addition to localhost.
+    """
     print(f"[INFO] Archive directory: {ARCHIVE_DIR}")
     print(f"[INFO] Starting FACES-IV Validation App on http://localhost:5001")
     app.run(host="0.0.0.0", port=5001, debug=True)
