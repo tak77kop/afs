@@ -77,7 +77,7 @@ sequenceDiagram
     participant Ther as afs_therapist
     participant MEval as afs_member_evaluator
     participant Eval as afs_evaluator
-    participant Opt as afs_optimizer
+    participant Optm as afs_optimizer
     participant Viewer as afs_viewer
 
     Member->>Ther: afs_trigger_evaluation (step boundary reached)
@@ -88,9 +88,9 @@ sequenceDiagram
     Note over Ther: Waits until every family member has responded
     Ther->>Eval: afs_evaluator_request (aggregated ratings)
     Eval->>Eval: Average the ratings, convert to percentiles, then to coordinates x and y
-    Eval->>Opt: afs_optimizer_request
-    Opt->>Opt: Gradient descent to get the next target tx and ty
-    Opt-->>Ther: afs_evaluator_results (x, y, tx, ty, ratios, ...)
+    Eval->>Optm: afs_optimizer_request
+    Optm->>Optm: Gradient descent to get the next target tx and ty
+    Optm-->>Ther: afs_evaluator_results (x, y, tx, ty, ratios, ...)
     Ther->>Ther: log evaluation_history.csv, update trajectory, render plot
     Ther-->>Viewer: afs_faces_plot_updated (plot image path)
     Ther->>Member: afs_evaluation_complete
@@ -105,16 +105,16 @@ sequenceDiagram
     participant STT as afs_stt
     participant Members as afs_family_member (all)
     participant TTS as afs_tts
-
+    
     User->>STT: speaks into microphone (VAD detects speech)
-    STT-->>Members: afs_user_intervention "user_speech_started"
-    Members->>TTS: afs_interrupt_tts "stop_all"
+    STT-->>Members: afs_user_intervention 'user_speech_started'
+    Members->>TTS: afs_interrupt_tts 'stop_all'
     STT->>STT: transcribe recorded audio via Gemini API
-    STT-->>Members: afs_user_intervention "user_speech_transcribed:<text>"
+    STT-->>Members: afs_user_intervention 'user_speech_transcribed:&lt;text&gt;'
     Members->>Members: each member casts a vote (Gemini API) for who should respond
     Members-->>STT: afs_responder_vote
-    STT->>STT: tally votes (majority; ties broken by family_config order)
-    STT-->>Members: afs_user_intervention "user_decision:<responder>"
+    STT->>STT: tally votes (majority, ties broken by family_config order)
+    STT-->>Members: afs_user_intervention 'user_decision:&lt;responder&gt;'
     Note over Members: only the selected member responds; the rest stay paused
     Members->>Members: afs_intervention_resolved (unlock, resume normal turns)
 ```
