@@ -1,0 +1,109 @@
+name: AFS CI Pipeline
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+jobs:
+  # ── Job 1: Fast Lint & Logic Unit Tests (Pure Python, ~1 min) ───────────────
+  lint-and-unit-tests:
+    name: Lint & Logic Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest
+
+      - name: Syntax and fatal error check (flake8)
+        run: |
+          # Stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run unit tests with dummy data (pytest)
+        run: |
+          # Execute logic layer tests without hardware or external API dependencies
+          pytest tests/ -v
+
+  # ── Job 2: ROS 2 Jazzy Workspace Build & Package Verification (~2-3 min) ────
+  ros2-jazzy-build:
+    name: ROS 2 Jazzy Build & Package Check
+    runs-on: ubuntu-24.04
+    container:
+      image: ros:jazzy-ros-base
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build and runtime dependencies
+        run: |
+          apt-get update && apt-get install -y \
+            python3-colcon-common-extensions \
+            python3-rosdep \
+            ros-jazzy-ament-cmake \
+            ros-jazzy-rosidl-default-generators \
+            ros-jazzy-rosidl-default-runtime \
+            python3-pip \
+            python3-dev \
+            libportaudio2 \
+            ffmpeg \
+            python3-tk \
+            && rm -rf /var/lib/apt/lists/*
+
+      - name: Install Python packages required for AFS
+        run: |
+          pip3 install --break-system-packages --ignore-installed \
+            openai \
+            google-genai \
+            numpy \
+            sounddevice \
+            webrtcvad \
+            matplotlib \
+            toio-py \
+            Pillow \
+            websockets \
+            pytest
+
+      - name: Build ROS 2 workspace (colcon)
+        run: |
+          /bin/bash -c "source /opt/ros/jazzy/setup.bash && colcon build --symlink-install"
+
+      - name: Verify package discovery and entrypoints
+        run: |
+          /bin/bash -c "
+            source /opt/ros/jazzy/setup.bash
+            source install/setup.bash
+            echo '=== Built AFS Packages ==='
+            ros2 pkg list | grep afs_
+          "
+
+  # ── Job 3: Docker Image Build Smoke Test (~3-4 min) ─────────────────────────
+  docker-build:
+    name: Dockerfile Build Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: afs:ci-test

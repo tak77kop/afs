@@ -111,3 +111,22 @@ python3 -m py_compile <every file you changed>
 
 Where possible, also check that the target node imports cleanly in a ROS2
 environment (`/opt/ros/jazzy`, with `rclpy` importable).
+
+## 6. Test & Dummy Data Maintenance Rules (Automated by AI)
+
+To ensure CI remains green without requiring physical hardware (toio cubes, microphones, speakers) or paid external API keys, any AI assistant working on this repository MUST adhere to the following rules:
+
+1. **When adding a new feature or logic**:
+   - Whenever you implement a new function, calculation, or data parser (especially in the logic layer), **you must automatically create or extend unit tests under `tests/test_<module>.py`**.
+   - Tests must use **synthetic / dummy data** (mock objects, dummy JSON strings, fixed coordinates) so they execute in < 0.1s without physical robots, audio hardware, or external network access.
+
+2. **When removing or modifying existing features**:
+   - If a function or interface is removed or changed, **you must update or delete the corresponding dummy data tests** in `tests/` so that tests remain synchronized and CI does not fail on obsolete code.
+
+3. **Mandatory test verification step**:
+   - Before completing your response, always run:
+     ```bash
+     python3 -m unittest discover tests
+     ```
+     Ensure all dummy data tests pass cleanly with zero errors.
+
