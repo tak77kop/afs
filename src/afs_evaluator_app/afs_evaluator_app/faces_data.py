@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Logic layer for FACES-IV data definitions and parsing.
+FACES-IV data definitions and parsing logic layer.
 
-Holds the 62-item definitions and subscale grouping, and parses the
-conversation history/evaluation CSV. Does not depend on Flask (this is a
-ROS2-independent web app already). Called from app.py in afs_evaluator_app.
+Maintains 62-item definitions and subscale groupings, and parses conversation
+history and evaluation CSVs. Free of Flask dependencies (this was originally a
+ROS2-independent web app). Called by app.py in afs_evaluator_app.
+
+Items 1-42 correspond to the original 6 FACES-IV scales (2 balanced, 4 unbalanced),
+43-52 to the Family Communication Scale, and 53-62 to the Family Satisfaction Scale.
+`SUBSCALES` below records these groupings.
+
+Note: The item texts in FACES_ITEMS are standard psychological assessment scale wording,
+retained in their original English to preserve validity as a standardized scale.
 """
 
 import csv
 import json
 import re
 
-# ── FACES-IV 62 Items ────────────────────────────────────────────────────────
+# -- FACES-IV 62 Items --------------------------------------------------------
 FACES_ITEMS = {
     1: "Family members are involved in each others lives.",
     2: "Our family tries new ways of dealing with problems.",
@@ -78,7 +85,9 @@ FACES_ITEMS = {
     62: "Family members concern for each other.",
 }
 
-# FACES-IV subscale groupings
+# FACES-IV subscale groupings.
+# Items 1-42 interleave across scales: every 6th item belongs to the same subscale,
+# which is why the indices below step by 6 rather than being contiguous.
 SUBSCALES = {
     "Balanced Cohesion": [1, 7, 13, 19, 25, 31, 37],
     "Balanced Flexibility": [2, 8, 14, 20, 26, 32, 38],
@@ -92,7 +101,7 @@ SUBSCALES = {
 
 
 def get_subscale(item_num: int) -> str:
-    """Return the subscale name for a given item number."""
+    """Return the subscale name for the specified item number."""
     for name, items in SUBSCALES.items():
         if item_num in items:
             return name
@@ -100,9 +109,16 @@ def get_subscale(item_num: int) -> str:
 
 
 def parse_conversation_history(text: str) -> dict:
-    """Parse conversation_history.txt → {session_id: [lines]}."""
+    """Parse conversation_history.txt -> {session_id: [lines]}.
+
+    This file contains more than raw conversation: therapist analysis notes and target
+    score records are mixed in. These are filtered out here because evaluators should
+    only read what the family actually said; exposing the system's own assessments
+    would bias independent evaluation scoring.
+    """
     sessions = {}
     current_session = None
+    # Lines are keyed as "S<session>_T<turn>" (e.g. "S0_T1")
     s_pattern = re.compile(r"^(S\d+)_T\d+")
 
     for line in text.strip().split("\n"):
@@ -112,7 +128,7 @@ def parse_conversation_history(text: str) -> dict:
         # Skip therapist analysis blocks
         if line.startswith("[THERAPIST_"):
             continue
-        # Check if it's metadata (target scores etc.)
+        # Check if line is metadata (target scores, etc.)
         if line.startswith("Determined ") or line.startswith("Targeted ") or \
            line.startswith("- ") or line.startswith("(Strategic"):
             continue
@@ -129,7 +145,13 @@ def parse_conversation_history(text: str) -> dict:
 
 
 def parse_evaluation_csv(filepath: str) -> dict:
-    """Parse evaluation_history.csv → {session_id: {member: {item: score}}}."""
+    """Parse evaluation_history.csv -> {session_id: {member: {item: score}}}.
+
+    Two columns contain JSON rather than simple numbers: each member's individual
+    62 scores and the cross-member mean. Rows with unparseable JSON yield empty
+    dicts instead of raising exceptions, preventing a single malformed row from
+    invalidating the entire archive.
+    """
     sessions = {}
     with open(filepath, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -153,8 +175,13 @@ def parse_evaluation_csv(filepath: str) -> dict:
 
 
 def parse_conversation_line(line: str) -> dict:
-    """Parse a single conversation line into structured data."""
+    """Parse a single conversation line into structured data.
+
+    The UI only uses the first 5 fields; remaining fields (voice, rationale, delay)
+    are internal system metadata and intentionally omitted from display.
+    """
     # Format: S0_T1,daughter,father,conversation,<text>,Leda,Leda,Normal,"<rationale>",0.5
+    # maxsplit=9 prevents further splitting on commas within trailing fields
     parts = line.split(",", 9)
     if len(parts) < 5:
         return {"raw": line}

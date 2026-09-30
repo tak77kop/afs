@@ -1,3 +1,13 @@
+# Speech synthesis request sent to the afs_tts node.
+#
+# Request: A single CSV line formatted identically to the conversation history:
+#   <role>,<recipient>,<type>,<text>,<voice>
+# Prefixing with "[LEADER_RESPONSE]" indicates a response directed to the user.
+# `delay` specifies the pause (in seconds) inserted before this utterance is spoken.
+#
+# Response: `success` only indicates that the request was accepted and enqueued.
+# Callers learn that the utterance has actually finished playing via the
+# `afs_tts_finished` topic, not from this response.
 string text
 float32 delay
 ---

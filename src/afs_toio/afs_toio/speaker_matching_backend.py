@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Logic layer for automatic toio<->speaker pairing.
+Logic layer for automated toio-to-speaker pairing.
 
-Handles announcements using the system TTS (spd-say) and getting the address/name
-from BLE devices. Does not depend on ROS2 communication. Called from the
-toio_speaker_match node.
+Handles system TTS announcements (via spd-say) and extracting BLE device addresses/names.
+Does not depend on ROS2 communication. Called from the toio_speaker_match node.
 """
 
 import asyncio
@@ -21,11 +20,18 @@ CONNECT_TIMEOUT = 5
 
 
 class SystemTTS:
-    """Logic class that speaks through a detected speaker (PulseAudio sink) using spd-say."""
+    """Logic class using spd-say to vocalize instructions through detected audio sinks (PulseAudio).
+
+    Intentionally uses the local OS speech engine rather than Gemini TTS: this tool
+    runs before any paired configuration exists, so it must function offline and without
+    API keys.
+
+    Constructor discovers available speakers and stores them in `sinks_in_priority`.
+    """
 
     def __init__(self, logger):
         self.logger = logger
-        # Detect available sinks
+        # Discover available sinks
         try:
             lines = subprocess.run(
                 ["pactl", "list", "short", "sinks"], capture_output=True, text=True, check=True
@@ -47,18 +53,23 @@ class SystemTTS:
 
             name = parts[1]
 
+            # Bluetooth speakers: sink names embed MAC addresses with underscores
+            # instead of colons, so normalize back to standard colon-delimited format.
             if name.startswith(("bluez_output.", "bluez_sink.")):
                 m = re.match(r"^(?:bluez_output|bluez_sink)\.([0-9A-F_]+)", name)
                 if m:
                     mac = m.group(1).replace('_', ':').upper()
                     self.device_map[mac] = name
                     bt_sinks.append(name)
+            # Machine internal output; retained as a last-resort fallback speaker
             elif name.startswith("alsa_output.") and ("analog-stereo" in name or "headphones" in name.lower()):
                 internal_sink = name
 
         self.logger.info(f"Detected BT sinks: {bt_sinks}")
         self.logger.info(f"Detected internal sink: {internal_sink}")
 
+        # Prioritize Bluetooth speakers: these are physically mounted onto the cubes.
+        # Internal speakers only serve as fallbacks when roles outnumber BT speakers.
         self.sinks_in_priority = bt_sinks
         if internal_sink:
             self.sinks_in_priority.append(internal_sink)
@@ -66,9 +77,12 @@ class SystemTTS:
         self.logger.info(f"Speaker priority: {self.sinks_in_priority}")
 
     def speak(self, text: str, sink: str):
+        """Speak `text` through a specific audio sink, blocking until playback finishes."""
         try:
             self.logger.info(f"Speaking: {text} on {sink}")
-            # Use spd-say for simple TTS
+            # Use spd-say for lightweight offline TTS.
+            # spd-say does not support an explicit sink parameter, so PULSE_SINK
+            # is set in the environment to route audio output.
             env = os.environ.copy()
             if sink:
                 env["PULSE_SINK"] = sink
@@ -79,9 +93,16 @@ class SystemTTS:
 
 
 def best_addr_name(dev) -> Tuple[Optional[str], Optional[str]]:
-    """Extract the address and name, as best as possible, from a BLE scan result object (and its inner interface)."""
+    """Extract device address and name as reliably as possible from a BLE scan result (and internal interface).
+
+    Address and name locations vary depending on bleak version and OS, so multiple
+    attribute names are tested across nested object hierarchies. Deeper layers
+    (interface and nested client/device objects) take precedence over shallower ones
+    as they are closer to the underlying BLE driver stack.
+    """
 
     def _get_addr_name_from_obj(obj) -> Tuple[Optional[str], Optional[str]]:
+        """Inspect common attribute names on an object to extract address and name."""
         addr = None
         name = None
         for a in ("address", "mac", "addr"):
@@ -112,7 +133,11 @@ def best_addr_name(dev) -> Tuple[Optional[str], Optional[str]]:
 
 
 async def fallback_query_name_addr(dev) -> Tuple[Optional[str], Optional[str]]:
-    """If the address/name can't be obtained from the scan result, connect and fetch it through GATT instead."""
+    """Connect directly to device and query address/name over GATT if missing from scan results.
+
+    Connecting and disconnecting over BLE is substantially slower than reading scan packets,
+    so this fallback is only used when `best_addr_name` cannot resolve the device name.
+    """
     try:
         cube = ToioCoreCube(dev.interface)
         await asyncio.wait_for(cube.connect(), timeout=CONNECT_TIMEOUT)

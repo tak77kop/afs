@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Logic layer for speech recognition (STT).
+Logic layer for Speech-to-Text (STT).
 
-Handles microphone recording, VAD (voice activity detection), transcription using the
-Gemini API, config loading, and vote counting. Does not depend on ROS2 communication
-(topic publish/subscribe). Called from the afs_stt node.
+Handles microphone recording, Voice Activity Detection (VAD), transcription via
+the Gemini API, configuration loading, and vote tallying. Does not depend on
+ROS2 communication (topic publishing/subscribing). Called from the afs_stt node.
 
-`GeminiLiveRecorder._record_audio` uses `rclpy.ok()` as its loop condition. This is
-only used to stop the recording loop when the node shuts down, not for any ROS2
-communication (publishers/subscribers) as such, so it is kept as-is here (changing
-this stop condition could change shutdown behavior).
+`GeminiLiveRecorder._record_audio` uses `rclpy.ok()` as a loop condition solely
+to stop the recording loop on node shutdown. Since this is purely a shutdown check
+rather than ROS2 communication itself, it is retained here to avoid changing
+shutdown behavior.
 """
 
 import rclpy
@@ -25,7 +25,14 @@ import webrtcvad
 
 
 class GeminiLiveRecorder:
-    """Logic class that detects speech with VAD, records it, and transcribes it using the Gemini REST API."""
+    """Logic class that detects speech with VAD, records audio, and transcribes via the Gemini REST API.
+
+    Recording start and end are controlled dynamically by two counters rather than fixed durations:
+    - `speech_trigger_frames`: Consecutive speech frames required before recording begins,
+      filtering out brief transient noises like coughs or door sounds.
+    - `max_silence_frames`: Consecutive silence frames before concluding recording,
+      computed from `silence_duration_s` to judge when the user has finished speaking.
+    """
 
     def __init__(
         self,
@@ -59,10 +66,13 @@ class GeminiLiveRecorder:
         self.lang_code = "ja-JP" if language == "ja" else "en-US"
         self.language = language
 
+        # webrtcvad only supports 8/16/32/48 kHz sample rates and 10/20/30 ms frame sizes;
+        # these constants are fixed by the library specification.
         self.sample_rate = 16000
-        self.vad = webrtcvad.Vad(vad_aggressiveness)
+        self.vad = webrtcvad.Vad(vad_aggressiveness)  # 0=permissive ... 3=strict
         self.frame_duration_ms = 30
         self.frame_size = int(self.sample_rate * (self.frame_duration_ms / 1000.0))
+        # Convert silence seconds to frame count (since loop operates on frames)
         self.max_silence_frames = int(silence_duration_s * 1000 / self.frame_duration_ms)
         self.speech_trigger_frames = speech_trigger_frames
         self.on_start = on_start
@@ -71,14 +81,17 @@ class GeminiLiveRecorder:
         self._is_speech_active = False
 
     async def _record_audio(self) -> bytes:
-        """Record audio while detecting speech start/end with VAD. Returns raw 16kHz PCM data (bytes)."""
+        """Record audio while detecting start/end of speech via VAD. Returns raw 16kHz PCM bytes."""
         speech_started = False
         silence_counter = 0
         speech_frame_counter = 0
+        # Ring buffer holding frames immediately preceding speech detection. Without this,
+        # recording would only start after `speech_trigger_frames` elapse, truncating the
+        # initial consonant/onset of speech.
         pre_buffer = deque(maxlen=self.speech_trigger_frames + 5)
         recorded_frames = []
 
-        # Determine the actual sample rate to use
+        # Determine target and actual hardware sample rates
         target_rate = self.sample_rate  # 16000
         actual_rate = target_rate
         needs_resample = False
@@ -86,8 +99,8 @@ class GeminiLiveRecorder:
         if self.device_index is not None:
             dev_info = sd.query_devices(self.device_index)
             dev_default_rate = int(dev_info['default_samplerate'])
-            # Try target rate first; if device doesn't list it, use its default
-            # Common rates that work with webrtcvad: 8000, 16000, 32000, 48000
+            # Try target rate first; if unsupported by hardware, fall back to default rate and resample.
+            # webrtcvad supported rates: 8000, 16000, 32000, 48000
             try:
                 sd.check_input_settings(device=self.device_index, samplerate=target_rate, channels=1, dtype='int16')
             except Exception:
@@ -112,7 +125,7 @@ class GeminiLiveRecorder:
                     # Resample to 16kHz if needed (for VAD and transcription)
                     if needs_resample:
                         audio_float = np.frombuffer(frame, dtype=np.int16).astype(np.float32)
-                        # Simple linear interpolation resampling
+                        # Linear interpolation resampling
                         target_len = int(len(audio_float) * target_rate / actual_rate)
                         indices = np.linspace(0, len(audio_float) - 1, target_len)
                         resampled = np.interp(indices, np.arange(len(audio_float)), audio_float)
@@ -120,17 +133,18 @@ class GeminiLiveRecorder:
                     else:
                         frame_16k = bytes(frame)
 
-                    # Energy calculation (on 16kHz data)
+                    # Calculate energy (performed on 16kHz audio)
                     audio_data = np.frombuffer(frame_16k, dtype=np.int16)
                     energy = np.sqrt(np.mean(audio_data.astype(np.float32)**2))
 
-                    # VAD expects exactly frame_size samples at 16kHz
-                    # Ensure frame is exact size for VAD
-                    vad_frame = frame_16k[:self.frame_size * 2]  # 2 bytes per int16 sample
+                    # VAD expects exact frame_size samples at 16kHz (2 bytes per int16 sample)
+                    vad_frame = frame_16k[:self.frame_size * 2]
                     if len(vad_frame) < self.frame_size * 2:
                         vad_frame = vad_frame + b'\x00' * (self.frame_size * 2 - len(vad_frame))
 
                     is_speech_vad = self.vad.is_speech(vad_frame, self.sample_rate)
+                    # Dual-condition check: webrtcvad can flag the robot's own speaker audio
+                    # as speech. The energy threshold excludes these faint ambient sounds.
                     is_speech = is_speech_vad and (energy >= self.vad_energy_threshold)
 
                     if self.vad_debug:
@@ -146,6 +160,7 @@ class GeminiLiveRecorder:
                         self.on_speech_status_change(False)
 
                     if not speech_started:
+                        # Phase 1: Idle waiting. Retain recent frames in case speech starts.
                         pre_buffer.append(frame_16k)
                         if is_speech:
                             speech_frame_counter += 1
@@ -153,11 +168,15 @@ class GeminiLiveRecorder:
                                 self.logger.info("AFS STT: Recording...")
                                 self.on_start()
                                 speech_started = True
+                                # Prepend buffered frames so the speech onset is preserved
                                 recorded_frames.extend(list(pre_buffer))
                                 pre_buffer.clear()
                         else:
+                            # Reset counter on break: frames must be continuous
                             speech_frame_counter = 0
                     else:
+                        # Phase 2: Actively recording. Requires continuous silence to terminate,
+                        # avoiding cutting off user mid-sentence during brief pauses.
                         recorded_frames.append(frame_16k)
                         if is_speech: silence_counter = 0
                         else: silence_counter += 1
@@ -172,7 +191,7 @@ class GeminiLiveRecorder:
         return b"".join(recorded_frames)
 
     def _transcribe_with_rest(self, audio_pcm: bytes) -> str:
-        """Convert the recorded PCM audio to WAV and send it to the Gemini REST API for transcription."""
+        """Convert recorded PCM to WAV format and submit to Gemini REST API for transcription."""
         import requests
         import base64
         import wave
@@ -180,12 +199,14 @@ class GeminiLiveRecorder:
         import io
         import socket
         import urllib3.util.connection as urllib3_cn
+        # Force IPv4 (same proxy workaround as other Gemini calls)
         urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
 
         if not audio_pcm:
             return ""
 
-        # Convert raw PCM to WAV format in memory
+        # Convert raw PCM into WAV format in memory.
+        # The API requires a formal WAV header, whereas recording yields raw samples.
         wav_buffer = io.BytesIO()
         with wave.open(wav_buffer, 'wb') as wf:
             wf.setnchannels(1)
@@ -194,7 +215,7 @@ class GeminiLiveRecorder:
             wf.writeframes(audio_pcm)
         wav_data = wav_buffer.getvalue()
 
-        # Encode as base64
+        # Base64 encode audio payload
         audio_b64 = base64.b64encode(wav_data).decode('utf-8')
 
         lang_instruction = "日本語で" if self.language == "ja" else "in English"
@@ -225,17 +246,24 @@ class GeminiLiveRecorder:
             return ""
 
     async def record_and_transcribe(self) -> str:
-        """Record audio, then turn it into text, one step after the other."""
+        """Record audio and transcribe to text sequentially.
+
+        This is the sole method invoked by the node; the two underlying steps are internal.
+        """
         audio_data = await self._record_audio()
         if not audio_data:
             return ""
-        # Run REST API call in a thread to avoid blocking the event loop
+        # Execute REST API call in a separate thread via asyncio.to_thread to avoid blocking
+        # the event loop (synchronous requests would freeze the loop for several seconds).
         transcript = await asyncio.to_thread(self._transcribe_with_rest, audio_data)
         return transcript
 
 
 def _find_config_file():
-    """Find `config.json` by checking AFS's standard locations in order, returning the first one that exists."""
+    """Check standard AFS locations and return the path to the first existing `config.json`.
+
+    Prioritizes source tree path so VAD tuning takes effect immediately without rebuilding.
+    """
     home = os.path.expanduser("~")
     paths = [
         os.path.join(home, "afs/src/afs_config/config/config.json"),
@@ -245,7 +273,10 @@ def _find_config_file():
 
 
 def load_stt_config() -> dict:
-    """Load VAD/language-related STT settings from `config.json` (following AFS's standard path resolution rules)."""
+    """Load VAD and language settings from `config.json` following standard AFS path resolution.
+
+    Returns safe defaults on any failure to ensure the node never crashes due to missing configs.
+    """
     config_data = {
         "language": "en",
         "vad_aggressiveness": 3,
@@ -272,7 +303,7 @@ def load_stt_config() -> dict:
 
 
 def load_family_config() -> list:
-    """Load the family composition (list of role names) from `config.json`."""
+    """Load family member roles list from `config.json`."""
     try:
         config_file = _find_config_file()
         if config_file:
@@ -285,7 +316,11 @@ def load_family_config() -> list:
 
 
 def select_audio_device():
-    """Let the user interactively choose a microphone device, and return the selected device ID (None = default)."""
+    """Interactively prompt user to choose a microphone device, returning selected device ID (None = default).
+
+    Prompted on each startup because system defaults often select internal laptop mics,
+    while experimental setups require external microphones. Pressing Enter keeps default.
+    """
     devices = sd.query_devices()
     input_devices = []
     for i, d in enumerate(devices):
@@ -297,7 +332,7 @@ def select_audio_device():
         return None
 
     print("\n" + "=" * 60)
-    print("  AFS STT - マイクデバイス選択 / Microphone Selection")
+    print("  AFS STT - Microphone Selection")
     print("=" * 60)
     for idx, (dev_id, d) in enumerate(input_devices):
         marker = " *" if d == sd.query_devices(kind='input') else "  "
@@ -305,13 +340,13 @@ def select_audio_device():
         print(f"        (channels: {d['max_input_channels']}, rate: {d['default_samplerate']:.0f}Hz)")
     print("=" * 60)
     print("  * = current default device")
-    print("  番号を入力してEnter / Enter number and press Enter:")
+    print("  Enter number and press Enter:")
 
     while True:
         try:
             choice = input("  > ").strip()
             if choice == "":
-                # Use default
+                # Use default device
                 print(f"  Using default device.")
                 return None
             idx = int(choice)
@@ -329,8 +364,12 @@ def select_audio_device():
 
 
 def count_votes(votes: dict, family_config: list, logger=None) -> str:
-    """Count the votes (role -> voted-for) and return the winner with the most votes (ties broken by family_config order)."""
+    """Tally votes (voter -> voted_for role) and return the winner (ties broken by family_config order).
+
+    Always returns a valid role to prevent deadlocks when no one responds to the user.
+    """
     if not votes:
+        # If no votes received (timeout or all members down), default to first family member
         return family_config[0] if family_config else "father"
 
     counts = {}
@@ -341,7 +380,7 @@ def count_votes(votes: dict, family_config: list, logger=None) -> str:
         logger.info(f"Vote count: {counts}")
 
     max_count = max(counts.values())
-    # Tie-break by family_config order (first listed wins)
+    # Break ties using family_config priority (earlier listed member wins)
     for member in family_config:
         if counts.get(member, 0) == max_count:
             return member
