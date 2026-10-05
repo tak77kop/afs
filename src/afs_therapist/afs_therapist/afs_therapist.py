@@ -144,6 +144,16 @@ class AFSTherapist(Node):
                 pass
         return traj
 
+    def _empty_member_scores(self) -> dict:
+        """Return an empty score dict for every configured family member.
+
+        Used at session start so member panels are visible immediately.
+        """
+        return {
+            role.lower(): {"x": None, "y": None}
+            for role in self.family_config
+        }
+
     def init_plot(self):
         """On startup, show the existing trajectory if one exists, otherwise plot the initial coordinates."""
         # Notify viewer to clear state first
@@ -158,16 +168,25 @@ class AFSTherapist(Node):
             y = last.get("result_y", last.get("y", 8.0))
             tx = last.get("target_x")
             ty = last.get("target_y")
-            self._generate_and_publish_plot(x, y, 1.0, 1.0, 1.0, traj, tx=tx, ty=ty)
+            member_scores = last.get("member_scores") or self._empty_member_scores()
+            self._generate_and_publish_plot(
+                x, y, 1.0, 1.0, 1.0, traj, tx=tx, ty=ty, member_scores=member_scores
+            )
         else:
             # Show S0 from initial_coords
             s0_x = self.initial_coords.get("x", 8.0)
             s0_y = self.initial_coords.get("y", 8.0)
-            self._generate_and_publish_plot(s0_x, s0_y, 1.0, 1.0, 1.0, [{"target_x": s0_x, "target_y": s0_y}])
+            self._generate_and_publish_plot(
+                s0_x, s0_y, 1.0, 1.0, 1.0,
+                [{"target_x": s0_x, "target_y": s0_y}],
+                member_scores=self._empty_member_scores()
+            )
 
-    def _generate_and_publish_plot(self, x, y, coh_ratio, flex_ratio, tot_ratio, trajectory=None, tx=None, ty=None):
+    def _generate_and_publish_plot(self, x, y, coh_ratio, flex_ratio, tot_ratio, trajectory=None, tx=None, ty=None, member_scores=None):
         """Generate the plot image using the logic layer, and publish its path to the viewer only on success."""
-        save_path = self.report.generate_plot(x, y, coh_ratio, flex_ratio, tot_ratio, trajectory, tx=tx, ty=ty)
+        save_path = self.report.generate_plot(
+            x, y, coh_ratio, flex_ratio, tot_ratio, trajectory, tx=tx, ty=ty, member_scores=member_scores
+        )
         if save_path:
             self.plot_pub.publish(String(data=save_path))
 
@@ -226,6 +245,7 @@ class AFSTherapist(Node):
             tot_ratio = data.get("tot_ratio")
             mean_ratings = data.get("mean_ratings")
             target_scores = data.get("target_scores")
+            member_scores = data.get("member_scores", {})
 
             self.processed_steps.add(step_id)
 
@@ -250,6 +270,15 @@ class AFSTherapist(Node):
             if details:
                 self.get_logger().info(f"[{self.role}] Clinical Behavioral Descriptions:\n{details}")
 
+            # Log individual member coordinates for debugging/research
+            for role, score in member_scores.items():
+                member_x = score.get("x")
+                member_y = score.get("y")
+                if member_x is not None and member_y is not None:
+                    self.get_logger().info(
+                        f"[{role}] Individual FACES IV: ({float(member_x):.1f}, {float(member_y):.1f})"
+                    )
+
             self.report.update_history_with_targets(HISTORY_FILE, target_scores, tx, ty)
 
             # Trajectory update
@@ -258,7 +287,14 @@ class AFSTherapist(Node):
             if not traj:
                 traj.append({"step": "S0", "target_x": self.initial_coords.get("x", 8.0), "target_y": self.initial_coords.get("y", 8.0)})
 
-            traj.append({"step": step_id, "result_x": x, "result_y": y, "target_x": tx, "target_y": ty})
+            traj.append({
+                "step": step_id,
+                "result_x": x,
+                "result_y": y,
+                "target_x": tx,
+                "target_y": ty,
+                "member_scores": member_scores
+            })
             with open(self.TRAJECTORY_FILE, 'w') as f:
                 json.dump(traj, f)
 
@@ -266,13 +302,14 @@ class AFSTherapist(Node):
             self.report.log_evaluation_to_csv(step_id, self.member_results[step_id], mean_ratings, pcts, x, y, tx, ty, coh_ratio, flex_ratio, tot_ratio, target_scores)
 
             self.get_logger().info(f"FACES IV Succeeded: Result({x:.1f}, {y:.1f}), Target({tx:.1f}, {ty:.1f})")
-            self._generate_and_publish_plot(x, y, coh_ratio, flex_ratio, tot_ratio, traj, tx=tx, ty=ty)
+            self._generate_and_publish_plot(x, y, coh_ratio, flex_ratio, tot_ratio, traj, tx=tx, ty=ty, member_scores=member_scores)
 
             # Finalize step
             self.complete_pub.publish(String(data=step_id))
 
         except Exception as e:
-            self.get_logger().error(f"Error processing evaluator results: {e}")
+            import traceback
+            self.get_logger().error(f"Error processing evaluator results: {e}\n{traceback.format_exc()}")
 
     def family_actions_callback(self, msg: String):
         pass

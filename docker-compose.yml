@@ -23,6 +23,7 @@ services:
       - .env
     volumes:
       - afs-data:/home/ubuntu/afs/src/afs_database
+      - .:/home/ubuntu/afs
     shm_size: '256m'
     restart: unless-stopped
 

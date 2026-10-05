@@ -73,6 +73,7 @@ class AFSOptimizer(Node):
             flex_ratio = data.get("flex_ratio")
             tot_ratio = data.get("tot_ratio")
             mean_ratings = data.get("mean_ratings")
+            member_scores = data.get("member_scores", {})
 
             # Calculate next target subscale scores using gradient descent (logic layer)
             target_scores = self.optimizer.calculate_gradient(pcts, x, y)
@@ -93,6 +94,7 @@ class AFSOptimizer(Node):
                 "flex_ratio": flex_ratio,
                 "tot_ratio": tot_ratio,
                 "mean_ratings": mean_ratings,
+                "member_scores": member_scores,
             }
 
             self.result_pub.publish(String(data=json.dumps(final_results)))

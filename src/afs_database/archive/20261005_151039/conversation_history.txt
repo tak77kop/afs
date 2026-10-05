@@ -1,0 +1,2 @@
+S0_T1,daughter,father,conversation,今年の飾り付け、パパは手伝ってくれるの？ずっと見てるだけなんて嫌だよ。,Vindemiatrix,Vindemiatrix,Normal,Daughter is trying to foster connection and shared activity during the holidays.,0
+S0_T2,father,daughter,conversation,おう、もちろんだ。昔みたいに、一番高いところに星を飾る役を任せてくれないか？,Alnilam,Alnilam,Normal,"Father shows receptivity and desire for shared activity, softening his usual distance.",0

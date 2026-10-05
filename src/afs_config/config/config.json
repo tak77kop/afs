@@ -36,7 +36,7 @@
   "w2": 1.0,
   "w3": 1.2,
   "turns_per_step": 10,
-  "terminal_mode": "gnome-terminal",
+  "terminal_mode": "xterm",
   "initial_coords": {
     "x": 50.0,
     "y": 50.0

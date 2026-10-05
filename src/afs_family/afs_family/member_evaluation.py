@@ -108,7 +108,9 @@ class MemberEvaluator:
         if max_session_id >= 0:
             prefix = f"S{max_session_id}_"
             session_lines = [line for line in lines if line.startswith(prefix)]
-            current_session_history = "\n".join(session_lines)
+
+            recent_lines = session_lines[-10:]
+            current_session_history = "\n".join(recent_lines)
             if not current_session_history:
                 current_session_history = history
         else:

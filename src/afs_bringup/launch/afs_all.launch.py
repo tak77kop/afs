@@ -347,15 +347,17 @@ class TerminalCommandBuilder:
         # Add diagnostic prefix to trace terminal startup in the spawned window
         debug_prefix = f"echo '[AFS Terminal] Starting: {inner_cmd}'; echo '[AFS Terminal] setup.bash: {setup_bash}'; "
 
+        full_bash_cmd = f"{env_export}{debug_prefix}source {setup_bash}; {inner_cmd}"
+
         if terminal_mode == "xterm":
             # `-hold` keeps the window open after node termination so error messages remain readable.
             return ['xterm', '-geometry', geometry, '-fa', 'Monospace', '-fs', '10',
-                    '-hold', '-e', f"bash -c '{env_export}{debug_prefix}source {setup_bash}; {inner_cmd}'"]
+                    '-hold', '-e', 'bash', '-c', full_bash_cmd]
         else:
             # Default: gnome-terminal.
             # Trailing `exec bash` is equivalent to xterm `-hold`, leaving an active shell.
             return ['gnome-terminal', '--geometry', geometry, '--', 'bash', '-c',
-                    f"{env_export}{debug_prefix}source {setup_bash} && {inner_cmd}; exec bash"]
+                    f"{full_bash_cmd}; exec bash"]
 
 
 def launch_nodes(context, *args, **kwargs):

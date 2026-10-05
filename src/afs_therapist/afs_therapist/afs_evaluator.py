@@ -57,23 +57,48 @@ class AFSEvaluator(Node):
             pass
 
     def request_callback(self, msg: String):
-        """Receive an evaluation request, calculate the scores, and publish to the Optimizer topic."""
+        """Receive an evaluation request.
+
+        The family-level score is calculated from averaged ratings.
+        Individual member scores are calculated independently from
+        each member's original 62-item ratings.
+        """
         try:
             data = json.loads(msg.data)
             step_id = data.get("step_id")
             aggregated_results = data.get("results")
 
-            # 1. Average the per-item ratings (logic layer)
-            ratings = self.calculator.average_ratings(aggregated_results)
+            if not aggregated_results:
+                self.get_logger().error(f"No evaluation results received for {step_id}")
+                return
 
-            # 2. Calculate the circumplex coordinates and percentiles (logic layer)
-            results = self.calculator.calculate_scores(ratings)
+            # 1. Calculate family-level score
+            mean_ratings = self.calculator.average_ratings(aggregated_results)
+            family_scores = self.calculator.calculate_scores(mean_ratings)
+
+            # 2. Calculate individual member scores
+            member_scores = {}
+            for role, member_result in aggregated_results.items():
+                ratings = {}
+                for item_id in range(1, 63):
+                    value = member_result.get(str(item_id))
+                    if isinstance(value, dict):
+                        value = value.get("rating")
+                    ratings[item_id] = float(value) if value is not None else 3.0
+                member_scores[role.lower()] = self.calculator.calculate_scores(ratings)
+
+            # 3. Combine results
+            results = dict(family_scores)
             results["step_id"] = step_id
+            results["mean_ratings"] = mean_ratings
+            results["member_scores"] = member_scores
 
-            # 3. Delegate next-target calculation to Optimizer
+            # 4. Delegate to Optimizer
             self.optimizer_req_pub.publish(String(data=json.dumps(results)))
             self.get_logger().info(
-                f"Scores calculated for {step_id}: Result({results['x']:.1f}, {results['y']:.1f}). Delegating to Optimizer."
+                f"Scores calculated for {step_id}: "
+                f"Family Result({results['x']:.1f}, {results['y']:.1f}), "
+                f"Members={list(member_scores.keys())}"
             )
 
         except Exception as e:

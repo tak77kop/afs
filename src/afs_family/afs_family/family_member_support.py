@@ -43,6 +43,9 @@ def load_full_history(history_file: str) -> str:
         with open(history_file, "r", encoding="utf-8") as f:
             lines = f.readlines()
         filtered = [l for l in lines if not (l.startswith("[THERAPIST_") or l.startswith("[SYSTEM_UPDATE"))]
+        # Keep only the last 12 lines to prevent context bloat and dragging old negative tones
+        if len(filtered) > 12:
+            filtered = filtered[-12:]
         return "".join(filtered)
     except FileNotFoundError:
         return ""
