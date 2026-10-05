@@ -109,7 +109,7 @@ class AFSTTS(Node):
         self.get_logger().info("AFS TTS Started.")
 
         # --- Logic layer (independent of rclpy: speech synthesis and sink control) ---
-        self.client = GeminiTTS(self.get_logger(), self.loop)
+        self.client = GeminiTTS(self.get_logger(), self.loop, CONFIG_FILE)
         self.sinks = AudioSinkController(self.get_logger())
 
         # Delegate config loading and volume detection to event loop;

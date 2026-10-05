@@ -299,6 +299,11 @@ class FacesReportGenerator:
             results_coords = []
             for step in trajectory:
                 rx, ry = step.get("result_x"), step.get("result_y")
+                # S0 stores the initial point as a target; later steps store
+                # evaluated points as result_x/result_y.
+                if step.get("step") == "S0" and (rx is None or ry is None):
+                    rx = step.get("target_x")
+                    ry = step.get("target_y")
                 if rx is not None and ry is not None:
                     results_coords.append((self.get_visual_coord(rx), self.get_visual_coord(ry)))
 

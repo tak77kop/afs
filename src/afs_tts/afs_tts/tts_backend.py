@@ -24,14 +24,20 @@ class GeminiTTS:
     audio for multiple family members in parallel, but playback is performed sequentially.
     """
 
-    def __init__(self, logger, loop):
+    def __init__(self, logger, loop, config_file):
         self.logger = logger
         self.loop = loop
         self.api_key = os.environ.get("GEMINI_API_KEY")
         if not self.api_key:
             self.logger.error("GEMINI_API_KEY environment variable is not set.")
             raise RuntimeError("GEMINI_API_KEY is missing")
-        self.model_id = "gemini-2.5-flash-preview-tts"
+        try:
+            with open(config_file, "r", encoding="utf-8") as config_handle:
+                config = json.load(config_handle)
+            self.model_id = config.get("tts_model", "gemini-2.5-flash-preview-tts")
+        except (OSError, json.JSONDecodeError) as e:
+            self.logger.error(f"Failed to load TTS model from {config_file}: {e}")
+            raise RuntimeError("TTS model configuration could not be loaded") from e
         self._current_playback_process = None
 
     async def generate_audio(self, text: str, voice: str) -> Optional[str]:
