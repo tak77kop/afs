@@ -10,6 +10,7 @@ afs_generator node.
 
 import os
 import re
+import time
 
 
 class DialogueGenerator:
@@ -20,7 +21,8 @@ class DialogueGenerator:
 
     def generate(self, role, language, family_config, target_user, assigned_voice_id, family_status,
                  theme_anchor, voice_list_content, config_content, current_history, few_shot_context,
-                 intervention_text, llm_model, llm_temperature) -> str:
+                 intervention_text, llm_model, llm_temperature, api_timeout_seconds=45.0,
+                 api_max_attempts=3) -> str:
         """Build the prompt from the role setup, conversation history, and clinical info, and generate one dialogue CSV line using the Gemini API."""
         prompt_base = self._build_prompt(
             role, language, family_config, target_user, assigned_voice_id, family_status,
@@ -29,7 +31,10 @@ class DialogueGenerator:
 
         system_instruction = f"Config: {config_content}\nVoices: {voice_list_content}\n\nHistory: {current_history}"
 
-        scenario_output = self._call_gemini(role, prompt_base, system_instruction, llm_model, llm_temperature)
+        scenario_output = self._call_gemini(
+            role, prompt_base, system_instruction, llm_model, llm_temperature,
+            api_timeout_seconds, api_max_attempts
+        )
         return self._extract_csv_line(scenario_output)
 
     def _build_prompt(self, role, language, family_config, target_user, assigned_voice_id, family_status,
@@ -106,7 +111,8 @@ You are speaking TO a family member ABOUT what the user said. Do NOT address the
 """
         return prompt_base
 
-    def _call_gemini(self, role, prompt_base, system_instruction, llm_model, llm_temperature) -> str:
+    def _call_gemini(self, role, prompt_base, system_instruction, llm_model, llm_temperature,
+                     api_timeout_seconds, api_max_attempts) -> str:
         """Call the Gemini REST API and return the generated dialogue text."""
         import requests
         import socket
@@ -131,14 +137,20 @@ You are speaking TO a family member ABOUT what the user said. Do NOT address the
                 "maxOutputTokens": 250
             }
         }
-        self.logger.info(f"Calling Gemini REST API for {role} (IPv4 Forced)...")
-        res = requests.post(url, headers=headers, json=payload, timeout=45.0)
-
-        self.logger.info(f"Gemini REST API response: {res.status_code}")
-        if res.status_code == 200:
-            return res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-        else:
-            raise RuntimeError(f"Gemini API returned {res.status_code}: {res.text[:200]}")
+        max_attempts = max(1, int(api_max_attempts))
+        for attempt in range(max_attempts):
+            try:
+                self.logger.info(f"Calling Gemini REST API for {role} (attempt {attempt + 1}/{max_attempts})...")
+                res = requests.post(url, headers=headers, json=payload, timeout=api_timeout_seconds)
+                self.logger.info(f"Gemini REST API response: {res.status_code}")
+                if res.status_code != 200:
+                    raise RuntimeError(f"Gemini API returned {res.status_code}: {res.text[:200]}")
+                return res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except Exception as e:
+                if attempt + 1 >= max_attempts:
+                    raise
+                self.logger.warn(f"Gemini dialogue API attempt {attempt + 1} failed: {e}. Retrying in 1 second.")
+                time.sleep(1.0)
 
     def _extract_csv_line(self, scenario_output: str) -> str:
         """Strip code fences from the LLM output and pull out the dialogue/action CSV line."""

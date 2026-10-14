@@ -136,7 +136,13 @@ class LeaderElection:
     """Determine the conversation initiator via majority vote among family members using Gemini API."""
 
     @staticmethod
-    def determine(roles: list, theme: str) -> str:
+    def determine(
+        roles: list,
+        theme: str,
+        api_timeout_seconds: float = 15.0,
+        total_timeout_seconds: float = 20.0,
+        api_max_attempts: int = 3,
+    ) -> str:
         """Select the first speaker via majority vote using Gemini API.
         Each family member votes on who should start the conversation.
 
@@ -170,8 +176,9 @@ class LeaderElection:
             Returns the target role in lowercase, or None if the call fails or
             does not match any name in `roles`.
             """
-            try:
-                prompt = f"""
+            for attempt in range(max(1, int(api_max_attempts))):
+                try:
+                    prompt = f"""
 You are "{voter_role}" in a family simulation.
 The family members are: {roles}
 The conversation theme is: "{theme}"
@@ -181,34 +188,43 @@ Consider which family member would most naturally initiate this topic.
 
 Respond with ONLY the name of ONE family member from the list above, in lowercase.
 """
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={api_key}"
-                headers = {"Content-Type": "application/json"}
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.3}
-                }
-                res = requests.post(url, headers=headers, json=payload, timeout=15.0)
-                if res.status_code == 200:
-                    ans = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip().lower()
-                    # The model may respond with a full sentence; check for
-                    # substring presence of known role names rather than strict equality.
-                    for m in roles:
-                        if m.lower() in ans:
-                            return m.lower()
-                return None
-            except Exception as e:
-                print(f"[afs_launch] Vote error for {voter_role}: {e}")
-                return None
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={api_key}"
+                    headers = {"Content-Type": "application/json"}
+                    payload = {
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": 0.3}
+                    }
+                    res = requests.post(url, headers=headers, json=payload, timeout=api_timeout_seconds)
+                    if res.status_code == 200:
+                        ans = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip().lower()
+                        # The model may respond with a full sentence; check for
+                        # substring presence of known role names rather than strict equality.
+                        for m in roles:
+                            if m.lower() in ans:
+                                return m.lower()
+                        raise RuntimeError(f"Vote API returned an unknown family member: {ans}")
+                    raise RuntimeError(f"Vote API returned {res.status_code}: {res.text[:200]}")
+                except Exception as e:
+                    if attempt + 1 >= max(1, int(api_max_attempts)):
+                        print(f"[afs_launch] Vote error for {voter_role} after {attempt + 1} attempts: {e}")
+                        return None
+                    print(f"[afs_launch] Vote attempt {attempt + 1} failed for {voter_role}: {e}. Retrying in 1 second.")
+                    time.sleep(1.0)
 
         # Parallel voting via threads.
         # Running one API call per member concurrently keeps total pre-launch delay
         # close to the latency of a single API call rather than accumulating sequentially.
         import concurrent.futures
+        attempts = max(1, int(api_max_attempts))
+        effective_total_timeout = max(
+            total_timeout_seconds,
+            api_timeout_seconds * attempts + (attempts - 1),
+        )
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(roles)) as executor:
             futures = {executor.submit(cast_vote, role): role for role in roles}
             try:
-                # 20-second global timeout. Use whatever votes arrived by then.
-                for future in concurrent.futures.as_completed(futures, timeout=20.0):
+                # Use whatever votes arrived before the configured global timeout.
+                for future in concurrent.futures.as_completed(futures, timeout=effective_total_timeout):
                     voter = futures[future]
                     result = future.result()
                     if result:
@@ -454,7 +470,12 @@ def generate_launch_description():
         subprocess.run(["pkill", "-f", node], stderr=subprocess.DEVNULL)
     # --------------------------
 
-    initial_role = LeaderElection.determine(roles, theme)
+    initial_role = LeaderElection.determine(
+        roles, theme,
+        config.get("api_timeouts", {}).get("initial_speaker_selection", 15.0),
+        config.get("api_timeouts", {}).get("initial_speaker_selection_total", 20.0),
+        config.get("api_max_attempts", {}).get("initial_speaker_selection", 3),
+    )
 
     # OpaqueFunction defers execution of `launch_nodes` until the launch system
     # actually runs, allowing resolved config and elected leader to be passed through.

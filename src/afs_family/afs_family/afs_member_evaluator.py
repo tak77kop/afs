@@ -50,7 +50,11 @@ class AFSMemberEvaluator(Node):
 
             self.get_logger().info(f"Evaluating {role} for {step_id}...")
 
-            results = self.evaluator.evaluate(role, history, llm_model, llm_temperature)
+            results = self.evaluator.evaluate(
+                role, history, llm_model, llm_temperature,
+                data.get("api_timeout_seconds", 45.0),
+                data.get("api_max_attempts", 3)
+            )
 
             result_payload = {
                 "step_id": step_id,

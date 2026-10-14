@@ -48,6 +48,8 @@ class GeminiLiveRecorder:
         language: str = "en",
         vad_debug: bool = False,
         vad_energy_threshold: float = 0.0,
+        api_timeout_seconds: float = 30.0,
+        api_max_attempts: int = 3,
         device_index: int = None,
     ):
         self.api_key = os.environ.get(api_key_env)
@@ -61,6 +63,8 @@ class GeminiLiveRecorder:
         self.on_speech_status_change = on_speech_status_change
         self.vad_debug = vad_debug
         self.vad_energy_threshold = vad_energy_threshold
+        self.api_timeout_seconds = api_timeout_seconds
+        self.api_max_attempts = api_max_attempts
         self.device_index = device_index
 
         self.lang_code = "ja-JP" if language == "ja" else "en-US"
@@ -231,19 +235,23 @@ class GeminiLiveRecorder:
             }]
         }
 
-        try:
-            self.logger.info("AFS STT: Sending audio to Gemini REST API for transcription...")
-            res = requests.post(url, headers=headers, json=payload, timeout=30.0)
-            if res.status_code == 200:
+        max_attempts = max(1, int(self.api_max_attempts))
+        for attempt in range(max_attempts):
+            try:
+                self.logger.info(f"AFS STT: Sending transcription request (attempt {attempt + 1}/{max_attempts})...")
+                res = requests.post(url, headers=headers, json=payload, timeout=self.api_timeout_seconds)
+                if res.status_code != 200:
+                    raise RuntimeError(f"API returned {res.status_code}: {res.text[:200]}")
                 transcript = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
                 self.logger.info(f"AFS STT: Transcription result: {transcript}")
                 return transcript
-            else:
-                self.logger.error(f"AFS STT: API returned {res.status_code}: {res.text[:200]}")
-                return ""
-        except Exception as e:
-            self.logger.error(f"AFS STT: Transcription error: {e}")
-            return ""
+            except Exception as e:
+                if attempt + 1 >= max_attempts:
+                    self.logger.error(f"AFS STT: Transcription failed after {max_attempts} attempts: {e}")
+                    return ""
+                self.logger.warn(f"AFS STT: Attempt {attempt + 1} failed: {e}. Retrying in 1 second.")
+                time.sleep(1.0)
+        return ""
 
     async def record_and_transcribe(self) -> str:
         """Record audio and transcribe to text sequentially.
@@ -278,12 +286,15 @@ def load_stt_config() -> dict:
     Returns safe defaults on any failure to ensure the node never crashes due to missing configs.
     """
     config_data = {
+        "model": "gemini-3.1-flash-lite",
         "language": "en",
         "vad_aggressiveness": 3,
         "silence_duration_s": 2.0,
         "speech_trigger_frames": 5,
         "vad_debug": False,
-        "vad_energy_threshold": 0.0
+        "vad_energy_threshold": 0.0,
+        "api_timeouts": {"speech_to_text": 30.0},
+        "api_max_attempts": {"speech_to_text": 3},
     }
     try:
         config_file = _find_config_file()
@@ -291,12 +302,17 @@ def load_stt_config() -> dict:
         if config_file:
             with open(config_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
+                config_data["model"] = config.get("stt_model", "gemini-3.1-flash-lite")
                 config_data["language"] = config.get("language", "en").lower()
                 config_data["vad_aggressiveness"] = config.get("vad_aggressiveness", 3)
                 config_data["silence_duration_s"] = config.get("silence_duration_s", 2.0)
                 config_data["speech_trigger_frames"] = config.get("speech_trigger_frames", 5)
                 config_data["vad_debug"] = config.get("vad_debug", False)
                 config_data["vad_energy_threshold"] = config.get("vad_energy_threshold", 0.0)
+                config_data["api_timeouts"] = config.get(
+                    "api_timeouts", {"speech_to_text": 30.0}
+                )
+                config_data["api_max_attempts"] = config.get("api_max_attempts", {"speech_to_text": 3})
     except Exception:
         pass
     return config_data

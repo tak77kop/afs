@@ -81,6 +81,8 @@ class AFSGenerator(Node):
                 intervention_text=intervention_text,
                 llm_model=llm_model,
                 llm_temperature=llm_temperature,
+                api_timeout_seconds=data.get("api_timeout_seconds", 45.0),
+                api_max_attempts=data.get("api_max_attempts", 3),
             )
 
             result = {

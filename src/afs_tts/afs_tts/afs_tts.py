@@ -258,7 +258,12 @@ class AFSTTS(Node):
                 audio_file = None
                 try:
                     self.get_logger().info(f"Playback worker: Waiting for synthesis task for {role}...")
-                    audio_file = await asyncio.wait_for(gen_task, timeout=70.0)
+                    attempts = max(1, int(self.client.api_max_attempts))
+                    synthesis_timeout = max(
+                        70.0,
+                        self.client.api_timeout_seconds * attempts + (attempts - 1),
+                    )
+                    audio_file = await asyncio.wait_for(gen_task, timeout=synthesis_timeout)
                     self.get_logger().info(f"Playback worker: synthesis RESUMED/READY for {role}.")
                 except asyncio.TimeoutError:
                     self.get_logger().error(f"Playback worker: synthesis TIMEOUT for {role}. Abandoning.")

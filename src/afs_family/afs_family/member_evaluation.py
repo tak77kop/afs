@@ -11,6 +11,7 @@ communication. Called from the afs_member_evaluator node.
 import os
 import re
 import json
+import time
 
 
 FACES_ITEMS = {
@@ -85,11 +86,12 @@ class MemberEvaluator:
     def __init__(self, logger):
         self.logger = logger
 
-    def evaluate(self, role: str, history: str, llm_model: str, llm_temperature: float) -> dict:
+    def evaluate(self, role: str, history: str, llm_model: str, llm_temperature: float,
+                 api_timeout_seconds: float = 45.0, api_max_attempts: int = 3) -> dict:
         """Extract the current session's conversation history and have the LLM produce a 62-item FACES IV evaluation as JSON."""
         current_session_history = self._scope_to_current_session(history)
         prompt = self._build_prompt(role, current_session_history)
-        return self._call_gemini(prompt, llm_model, llm_temperature)
+        return self._call_gemini(prompt, llm_model, llm_temperature, api_timeout_seconds, api_max_attempts)
 
     def _scope_to_current_session(self, history: str) -> str:
         """Extract only the latest session (the highest S-number) from the full conversation history."""
@@ -148,7 +150,8 @@ Output ONLY valid JSON in this exact format:
 }}
 """
 
-    def _call_gemini(self, prompt: str, llm_model: str, llm_temperature: float) -> dict:
+    def _call_gemini(self, prompt: str, llm_model: str, llm_temperature: float,
+                     api_timeout_seconds: float, api_max_attempts: int) -> dict:
         """Call the Gemini REST API and parse the JSON-formatted evaluation result."""
         import requests
         import socket
@@ -172,10 +175,16 @@ Output ONLY valid JSON in this exact format:
                 "responseMimeType": "application/json"
             }
         }
-        res = requests.post(url, headers=headers, json=payload, timeout=45.0)
-
-        if res.status_code == 200:
-            content_res = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-        else:
-            raise RuntimeError(f"Gemini API returned {res.status_code}: {res.text[:200]}")
-        return json.loads(content_res)
+        max_attempts = max(1, int(api_max_attempts))
+        for attempt in range(max_attempts):
+            try:
+                res = requests.post(url, headers=headers, json=payload, timeout=api_timeout_seconds)
+                if res.status_code != 200:
+                    raise RuntimeError(f"Gemini API returned {res.status_code}: {res.text[:200]}")
+                content_res = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                return json.loads(content_res)
+            except Exception as e:
+                if attempt + 1 >= max_attempts:
+                    raise
+                self.logger.warn(f"Gemini evaluation API attempt {attempt + 1} failed: {e}. Retrying in 1 second.")
+                time.sleep(1.0)

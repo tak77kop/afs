@@ -35,6 +35,10 @@ class GeminiTTS:
             with open(config_file, "r", encoding="utf-8") as config_handle:
                 config = json.load(config_handle)
             self.model_id = config.get("tts_model", "gemini-2.5-flash-preview-tts")
+            self.api_timeout_seconds = config.get("api_timeouts", {}).get(
+                "text_to_speech", 30.0
+            )
+            self.api_max_attempts = config.get("api_max_attempts", {}).get("text_to_speech", 5)
         except (OSError, json.JSONDecodeError) as e:
             self.logger.error(f"Failed to load TTS model from {config_file}: {e}")
             raise RuntimeError("TTS model configuration could not be loaded") from e
@@ -66,9 +70,10 @@ class GeminiTTS:
             last_error = None
 
             self.logger.info(f"Generating audio for voice '{voice}' via {self.model_id} (REST Parallel)...")
-            # Retry up to 5 times: the TTS endpoint frequently returns rate limits
+            # Retry up to the configured number of attempts: the endpoint frequently returns rate limits
             # or transient errors; a silent robot disrupts the conversation flow.
-            for attempt in range(5):
+            max_attempts = max(1, int(self.api_max_attempts))
+            for attempt in range(max_attempts):
                 try:
                     self.logger.info(f"API attempt {attempt+1} starting for {voice}...")
                     import requests
@@ -95,7 +100,7 @@ class GeminiTTS:
                                 }
                             }
                         }
-                        return requests.post(url, headers=headers, json=payload, timeout=30.0)
+                        return requests.post(url, headers=headers, json=payload, timeout=self.api_timeout_seconds)
 
                     res = await asyncio.to_thread(call_api)
                     if res.status_code == 200:
@@ -112,7 +117,7 @@ class GeminiTTS:
                     self.logger.warn(f"Gemini TTS attempt {attempt+1} failed for {voice}: {e}")
 
                 # Brief backoff before retry unless on the final attempt
-                if attempt < 4:
+                if attempt + 1 < max_attempts:
                     await asyncio.sleep(1.0)
 
             if not audio_data:

@@ -16,6 +16,7 @@ in the Node).
 import fcntl
 import json
 import os
+import time
 
 
 # Lookup table that turns Japanese/English ways of addressing a family member into the standard role name
@@ -94,7 +95,8 @@ def append_history(history_file: str, text: str, turns_per_step: int, is_leader_
             logger.error(f"Failed to write history: {e}")
 
 
-def cast_responder_vote(role: str, family_config: list, language: str, history_text: str, user_text: str, logger=None) -> str:
+def cast_responder_vote(role: str, family_config: list, language: str, history_text: str, user_text: str,
+                        logger=None, api_timeout_seconds: float = 15.0, api_max_attempts: int = 3) -> str:
     """Ask the Gemini API to decide who should respond to the user's utterance, and return the voted-for role name."""
     try:
         import requests
@@ -134,17 +136,23 @@ Output the name in lowercase, nothing else.
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.0}
         }
-        res = requests.post(url, headers=headers, json=payload, timeout=15.0)
-        if res.status_code == 200:
-            ans = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip().lower()
-        else:
-            if logger:
-                logger.error(f"[{role}] Vote API error: {res.status_code}")
-            return family_config[0]
-
-        for m in family_config:
-            if m.lower() in ans:
-                return m.lower()
+        max_attempts = max(1, int(api_max_attempts))
+        for attempt in range(max_attempts):
+            try:
+                res = requests.post(url, headers=headers, json=payload, timeout=api_timeout_seconds)
+                if res.status_code != 200:
+                    raise RuntimeError(f"Vote API returned {res.status_code}: {res.text[:200]}")
+                ans = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip().lower()
+                for m in family_config:
+                    if m.lower() in ans:
+                        return m.lower()
+                raise RuntimeError(f"Vote API returned an unknown family member: {ans}")
+            except Exception as e:
+                if attempt + 1 >= max_attempts:
+                    raise
+                if logger:
+                    logger.warn(f"[{role}] Responder vote attempt {attempt + 1} failed: {e}. Retrying in 1 second.")
+                time.sleep(1.0)
         return family_config[0]
     except Exception as e:
         if logger:

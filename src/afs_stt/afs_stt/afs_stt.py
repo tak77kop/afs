@@ -154,6 +154,7 @@ class AFSSTT(Node):
     def _create_recorder(self, device_index):
         """Create or recreate recorder (logic layer) for the specified device."""
         self.recorder = GeminiLiveRecorder(
+            model=self.stt_config.get("model", "gemini-3.1-flash-lite"),
             on_start=self._on_speech_start,
             on_end=self._on_speech_end,
             on_speech_status_change=self._on_speech_status_change,
@@ -164,6 +165,8 @@ class AFSSTT(Node):
             speech_trigger_frames=self.stt_config["speech_trigger_frames"],
             vad_debug=self.stt_config.get("vad_debug", False),
             vad_energy_threshold=self.stt_config.get("vad_energy_threshold", 0.0),
+            api_timeout_seconds=self.stt_config.get("api_timeouts", {}).get("speech_to_text", 30.0),
+            api_max_attempts=self.stt_config.get("api_max_attempts", {}).get("speech_to_text", 3),
             device_index=device_index,
         )
 

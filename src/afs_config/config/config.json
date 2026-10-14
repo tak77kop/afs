@@ -42,10 +42,28 @@
     "y": 50.0
   },
   "learning_rate_scaling": 0.15,
-  "llm_model": "gemini-3.1-flash-lite",
+  "llm_model": "gemini-3.5-flash-lite",
+  "stt_model": "gemini-3.5-flash-lite",
   "tts_model": "gemini-2.5-flash-preview-tts",
+  "api_timeouts": {
+    "dialogue_generation": 45.0,
+    "member_evaluation": 45.0,
+    "user_responder_vote": 15.0,
+    "initial_speaker_selection": 15.0,
+    "initial_speaker_selection_total": 20.0,
+    "speech_to_text": 30.0,
+    "text_to_speech": 30.0
+  },
+  "api_max_attempts": {
+    "dialogue_generation": 3,
+    "member_evaluation": 3,
+    "user_responder_vote": 3,
+    "initial_speaker_selection": 3,
+    "speech_to_text": 3,
+    "text_to_speech": 5
+  },
   "llm_temperature": 1.0,
-  "llm_evaluation_model": "gemini-3.1-flash-lite",
+  "llm_evaluation_model": "gemini-3.5-flash-lite",
   "llm_evaluation_temperature": 1.0,
   "shutdown_timer_minutes": 0
 }

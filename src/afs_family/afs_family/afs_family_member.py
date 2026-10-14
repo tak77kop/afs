@@ -162,6 +162,16 @@ class AFSFamilyMember(Node):
         self.llm_temperature = 1.0
         self.llm_evaluation_model = "gpt-5.2-chat-latest"
         self.llm_evaluation_temperature = 0.7
+        self.api_timeouts = {
+            "dialogue_generation": 45.0,
+            "member_evaluation": 45.0,
+            "user_responder_vote": 15.0,
+        }
+        self.api_max_attempts = {
+            "dialogue_generation": 3,
+            "member_evaluation": 3,
+            "user_responder_vote": 3,
+        }
         self.next_turn_recipient = None
         self.faces_tables = {}  # Removed: self._load_faces_tables()
         self.generation_lock = threading.Lock()
@@ -264,6 +274,8 @@ class AFSFamilyMember(Node):
                     self.llm_temperature = config.get("llm_temperature", 1.0)
                     self.llm_evaluation_model = config.get("llm_evaluation_model", "gpt-5.2-chat-latest")
                     self.llm_evaluation_temperature = config.get("llm_evaluation_temperature", 0.7)
+                    self.api_timeouts.update(config.get("api_timeouts", {}))
+                    self.api_max_attempts.update(config.get("api_max_attempts", {}))
         except Exception as e:
             self.get_logger().error(f"Config load error: {e}")
 
@@ -375,16 +387,24 @@ class AFSFamilyMember(Node):
         append_history(HISTORY_FILE, text, self.turns_per_step, is_leader_response, self.get_logger())
 
     def _generation_watchdog(self):
-        """Runs every 10 seconds; forcibly releases the lock if dialogue generation has been stuck for over 45 seconds."""
+        """Release a stale generation lock and restart any deferred generation."""
+        should_retrigger = False
         with self.generation_lock:
             if self.is_generating_scenario:
                 elapsed = time.time() - self.generation_start_time
-                if elapsed > 45.0:
+                api_timeout = self.api_timeouts["dialogue_generation"]
+                attempts = max(1, int(self.api_max_attempts["dialogue_generation"]))
+                generation_deadline = api_timeout * attempts + (attempts - 1) + 10.0
+                if elapsed > generation_deadline:
                     self.get_logger().error(f"[{self.role}] DETECTED STUCK GENERATION ({elapsed:.1f}s). Resetting lock.")
                     self.is_generating_scenario = False
-                    if self.start_signal_deferred:
-                        self.get_logger().info(f"[{self.role}] Re-triggering deferred generation...")
-                        self.trigger_scenario_generation(force_publish=True)
+                    should_retrigger = self.start_signal_deferred
+
+        # trigger_scenario_generation acquires generation_lock itself, so call it
+        # only after leaving the lock scope above.
+        if should_retrigger:
+            self.get_logger().info(f"[{self.role}] Re-triggering deferred generation...")
+            self.trigger_scenario_generation(force_publish=True)
 
     # ------------------------------------------------------------------
     # Conversation-turn state transitions (kept together because ROS2
@@ -486,6 +506,8 @@ class AFSFamilyMember(Node):
                     "intervention_text": intervention_text,
                     "llm_model": self.llm_model,
                     "llm_temperature": self.llm_temperature,
+                    "api_timeout_seconds": self.api_timeouts["dialogue_generation"],
+                    "api_max_attempts": self.api_max_attempts["dialogue_generation"],
                     "metadata": {
                         "is_intervention": is_intervention,
                         "is_initial_statement": is_initial_statement,
@@ -579,13 +601,14 @@ class AFSFamilyMember(Node):
                      else:
                          self.pending_scenario_conversation = target_line
 
-                if is_initial_statement or force_publish:
-                    if self.start_signal_deferred or force_publish:
-                        self.get_logger().info(f"[{self.role}] Publishing initial/forced statement.")
-                        self.publish_pending_scenario(force_publish=True)
-                        self.start_signal_deferred = False
-                    else:
-                        self.get_logger().info(f"[{self.role}] Staging initial statement.")
+                if self.start_signal_deferred or force_publish:
+                    # A finish trigger may arrive while a normal dialogue is
+                    # generating. Honor it when that in-flight result arrives.
+                    self.get_logger().info(f"[{self.role}] Publishing deferred/forced statement.")
+                    self.publish_pending_scenario(force_publish=True)
+                    self.start_signal_deferred = False
+                elif is_initial_statement:
+                    self.get_logger().info(f"[{self.role}] Staging initial statement.")
                 else:
                     # Pre-synthesis for regular turns if needed
                     if self.pending_scenario_conversation:
@@ -833,7 +856,11 @@ class AFSFamilyMember(Node):
     def _cast_responder_vote(self, user_text: str):
         """Have the LLM cast the responder vote for the user's utterance (handled by the logic layer)."""
         history = self.load_full_history()
-        return _cast_responder_vote_util(self.role, self.family_config, self.language, history, user_text, self.get_logger())
+        return _cast_responder_vote_util(
+            self.role, self.family_config, self.language, history, user_text,
+            self.get_logger(), self.api_timeouts["user_responder_vote"],
+            self.api_max_attempts["user_responder_vote"]
+        )
 
     def user_intervention_callback(self, msg: String):
         """Handle the user's spoken interruption (start / transcription / responder decision)."""
@@ -989,7 +1016,9 @@ class AFSFamilyMember(Node):
             "role": self.role,
             "history": history,
             "llm_model": self.llm_evaluation_model,
-            "llm_temperature": self.llm_evaluation_temperature
+            "llm_temperature": self.llm_evaluation_temperature,
+            "api_timeout_seconds": self.api_timeouts["member_evaluation"],
+            "api_max_attempts": self.api_max_attempts["member_evaluation"]
         }
 
         self.member_eval_req_pub.publish(String(data=json.dumps(request)))
