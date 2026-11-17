@@ -34,6 +34,7 @@ import os
 # to reach the GCE metadata server and hangs indefinitely in proxied environments.
 os.environ["NO_GCE_CHECK"] = "true"
 import json
+import logging
 import random
 import shlex
 import sys
@@ -206,9 +207,9 @@ Respond with ONLY the name of ONE family member from the list above, in lowercas
                     raise RuntimeError(f"Vote API returned {res.status_code}: {res.text[:200]}")
                 except Exception as e:
                     if attempt + 1 >= max(1, int(api_max_attempts)):
-                        print(f"[afs_launch] Vote error for {voter_role} after {attempt + 1} attempts: {e}")
+                        logging.debug(f"[afs_launch] Vote error for {voter_role} after {attempt + 1} attempts: {e}")
                         return None
-                    print(f"[afs_launch] Vote attempt {attempt + 1} failed for {voter_role}: {e}. Retrying in 1 second.")
+                    logging.debug(f"[afs_launch] Vote attempt {attempt + 1} failed for {voter_role}: {e}. Retrying in 1 second.")
                     time.sleep(1.0)
 
         # Parallel voting via threads.
@@ -344,7 +345,6 @@ class TerminalCommandBuilder:
         is the `ros2 run ...` command executed after sourcing setup.bash.
         """
         setup_bash = cls._get_setup_bash_path()
-        print(f"[afs_launch] Terminal setup.bash path: {setup_bash}")
 
         # Propagate environment variables (GEMINI_API_KEY and proxy settings) to new terminal windows.
         # Disable GCE checks so google-auth does not hang on metadata server lookups.
@@ -360,10 +360,7 @@ class TerminalCommandBuilder:
 
         env_export = "; ".join(exports) + "; "
 
-        # Add diagnostic prefix to trace terminal startup in the spawned window
-        debug_prefix = f"echo '[AFS Terminal] Starting: {inner_cmd}'; echo '[AFS Terminal] setup.bash: {setup_bash}'; "
-
-        full_bash_cmd = f"{env_export}{debug_prefix}source {setup_bash}; {inner_cmd}"
+        full_bash_cmd = f"{env_export}source {setup_bash}; {inner_cmd}"
 
         if terminal_mode == "xterm":
             # `-hold` keeps the window open after node termination so error messages remain readable.

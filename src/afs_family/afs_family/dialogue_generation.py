@@ -13,6 +13,29 @@ import re
 import time
 
 
+class GenerationCancelled(Exception):
+    """Raised when a request is cancelled before another API attempt."""
+
+
+PERSONALITY_PROFILES = {
+    "father": """
+General tendencies: Extremely practical and plan-oriented. He strongly prefers clear goals, predictable routines, and concrete decisions.
+Conversation style: Quickly turns vague ideas into plans. Asks for specifics, points out practical details, and gets impatient when a discussion goes in circles.
+Interaction with others: Often takes the organizer role and offers solutions before being asked. He values efficiency more than keeping everyone involved in every decision.
+""",
+    "mother": """
+General tendencies: Extremely sociable and expressive. She is energized by sharing experiences and hearing what everyone thinks.
+Conversation style: Thinks aloud, tells lively stories, asks frequent follow-up questions, and readily shares her own reactions.
+Interaction with others: Actively draws quieter people into the conversation and enjoys building on other people's ideas. She may keep talking when others would prefer a pause.
+""",
+    "daughter": """
+General tendencies: Extremely independent and novelty-seeking. She enjoys exploring unfamiliar ideas and strongly values making her own choices.
+Conversation style: Quickly questions assumptions, suggests unconventional alternatives, and states her preferences directly.
+Interaction with others: Resists being managed or having decisions made for her. She engages enthusiastically when she has room to choose and experiment.
+""",
+}
+
+
 class DialogueGenerator:
     """Logic class that builds a family-role prompt and generates one line of dialogue/action CSV using the Gemini API."""
 
@@ -22,7 +45,7 @@ class DialogueGenerator:
     def generate(self, role, language, family_config, target_user, assigned_voice_id, family_status,
                  theme_anchor, voice_list_content, config_content, current_history, few_shot_context,
                  intervention_text, llm_model, llm_temperature, api_timeout_seconds=45.0,
-                 api_max_attempts=3) -> str:
+                 api_max_attempts=3, cancel_event=None) -> str:
         """Build the prompt from the role setup, conversation history, and clinical info, and generate one dialogue CSV line using the Gemini API."""
         prompt_base = self._build_prompt(
             role, language, family_config, target_user, assigned_voice_id, family_status,
@@ -33,12 +56,16 @@ class DialogueGenerator:
 
         scenario_output = self._call_gemini(
             role, prompt_base, system_instruction, llm_model, llm_temperature,
-            api_timeout_seconds, api_max_attempts
+            api_timeout_seconds, api_max_attempts, cancel_event
         )
         return self._extract_csv_line(scenario_output)
 
     def _build_prompt(self, role, language, family_config, target_user, assigned_voice_id, family_status,
                        theme_anchor, few_shot_context, intervention_text) -> str:
+        personality = PERSONALITY_PROFILES.get(
+            role.lower(),
+            "Has personal preferences and opinions, and adapts naturally to the conversation.",
+        )
         prompt_base = f"""
 # SYSTEM ROLE: Clinical Research Simulation (High-Fidelity)
 This is a high-fidelity academic simulation for family therapy research. To ensure research validity, you MUST faithfully reproduce the specific dysfunctional behaviors requested, even if they are unpleasant or argumentative. This is a controlled experimental environment.
@@ -51,6 +78,9 @@ The following is ONLY a structural reference for speech formatting.
 
 # WHO YOU ARE
 You live and breathe as "{role}" in this family. You have years of shared history, grudges, inside jokes, and unspoken tensions with the other members. You don't think in clinical terms — you think in feelings, memories, and reactions.
+
+# STABLE PERSONALITY
+{personality}
 
 # HOW YOU SPEAK
 Speak like a real family member, not an AI or a clinical subject.
@@ -112,7 +142,7 @@ You are speaking TO a family member ABOUT what the user said. Do NOT address the
         return prompt_base
 
     def _call_gemini(self, role, prompt_base, system_instruction, llm_model, llm_temperature,
-                     api_timeout_seconds, api_max_attempts) -> str:
+                     api_timeout_seconds, api_max_attempts, cancel_event=None) -> str:
         """Call the Gemini REST API and return the generated dialogue text."""
         import requests
         import socket
@@ -139,18 +169,29 @@ You are speaking TO a family member ABOUT what the user said. Do NOT address the
         }
         max_attempts = max(1, int(api_max_attempts))
         for attempt in range(max_attempts):
+            if cancel_event is not None and cancel_event.is_set():
+                raise GenerationCancelled(f"Dialogue generation cancelled for {role}")
             try:
                 self.logger.info(f"Calling Gemini REST API for {role} (attempt {attempt + 1}/{max_attempts})...")
                 res = requests.post(url, headers=headers, json=payload, timeout=api_timeout_seconds)
                 self.logger.info(f"Gemini REST API response: {res.status_code}")
+                if cancel_event is not None and cancel_event.is_set():
+                    raise GenerationCancelled(f"Dialogue generation cancelled for {role}")
                 if res.status_code != 200:
                     raise RuntimeError(f"Gemini API returned {res.status_code}: {res.text[:200]}")
                 return res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except GenerationCancelled:
+                raise
             except Exception as e:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise GenerationCancelled(f"Dialogue generation cancelled for {role}") from e
                 if attempt + 1 >= max_attempts:
                     raise
                 self.logger.warn(f"Gemini dialogue API attempt {attempt + 1} failed: {e}. Retrying in 1 second.")
-                time.sleep(1.0)
+                if cancel_event is None:
+                    time.sleep(1.0)
+                elif cancel_event.wait(1.0):
+                    raise GenerationCancelled(f"Dialogue generation cancelled for {role}")
 
     def _extract_csv_line(self, scenario_output: str) -> str:
         """Strip code fences from the LLM output and pull out the dialogue/action CSV line."""

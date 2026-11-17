@@ -152,6 +152,8 @@ class AFSFamilyMember(Node):
         self.audio_synthesis_requested = False
         self.step_count = 0
         self.waiting_for_evaluation = False
+        self._evaluation_state_lock = threading.RLock()
+        self.pending_turn_start = None
         self.turns_per_step = 10
         self.initial_coords = {"x": 8.0, "y": 8.0}
         self.pending_intervention_text = None
@@ -172,6 +174,7 @@ class AFSFamilyMember(Node):
             "member_evaluation": 3,
             "user_responder_vote": 3,
         }
+        self.generation_watchdog_timeout_seconds = 120.0
         self.next_turn_recipient = None
         self.faces_tables = {}  # Removed: self._load_faces_tables()
         self.generation_lock = threading.Lock()
@@ -229,6 +232,7 @@ class AFSFamilyMember(Node):
         self.toio_move_finished_publisher = self.create_publisher(String, 'afs_toio_move_finished', 10)
         self.trigger_eval_pub = self.create_publisher(String, 'afs_trigger_evaluation', 10)
         self.generator_req_pub = self.create_publisher(String, 'afs_generator_request', 10)
+        self.generator_cancel_pub = self.create_publisher(String, 'afs_generator_cancel', 10)
         self.member_eval_req_pub = self.create_publisher(String, 'afs_member_eval_request', 10)
         self.behavior_req_pub = self.create_publisher(String, 'afs_behavioral_info_request', 10)
         self.few_shot_req_pub = self.create_publisher(String, 'afs_few_shot_request', 10)
@@ -276,6 +280,10 @@ class AFSFamilyMember(Node):
                     self.llm_evaluation_temperature = config.get("llm_evaluation_temperature", 0.7)
                     self.api_timeouts.update(config.get("api_timeouts", {}))
                     self.api_max_attempts.update(config.get("api_max_attempts", {}))
+                    self.generation_watchdog_timeout_seconds = config.get(
+                        "generation_watchdog_timeout_seconds",
+                        self.generation_watchdog_timeout_seconds,
+                    )
         except Exception as e:
             self.get_logger().error(f"Config load error: {e}")
 
@@ -389,16 +397,22 @@ class AFSFamilyMember(Node):
     def _generation_watchdog(self):
         """Release a stale generation lock and restart any deferred generation."""
         should_retrigger = False
+        stale_request_id = None
         with self.generation_lock:
             if self.is_generating_scenario:
                 elapsed = time.time() - self.generation_start_time
-                api_timeout = self.api_timeouts["dialogue_generation"]
-                attempts = max(1, int(self.api_max_attempts["dialogue_generation"]))
-                generation_deadline = api_timeout * attempts + (attempts - 1) + 10.0
-                if elapsed > generation_deadline:
+                if elapsed > self.generation_watchdog_timeout_seconds:
                     self.get_logger().error(f"[{self.role}] DETECTED STUCK GENERATION ({elapsed:.1f}s). Resetting lock.")
                     self.is_generating_scenario = False
+                    stale_request_id = self.active_docs_request_id
+                    self.active_docs_request_id = None
                     should_retrigger = self.start_signal_deferred
+
+        if stale_request_id:
+            self.generator_cancel_pub.publish(
+                String(data=json.dumps({"request_id": stale_request_id, "role": self.role}))
+            )
+            self.get_logger().debug(f"[{self.role}] Sent cancellation for stale generation (Req: {stale_request_id}).")
 
         # trigger_scenario_generation acquires generation_lock itself, so call it
         # only after leaving the lock scope above.
@@ -417,21 +431,24 @@ class AFSFamilyMember(Node):
         if not self.initialization_done or (self.is_scenario_generation_paused and not is_intervention):
             return
 
-        if self.waiting_for_evaluation:
-            self.am_i_intervention_responder = is_intervention
-            self.pending_intervention_text = intervention_text
-            self.get_logger().info(f"[{self.role}] Deferred generation due to evaluation.")
-            return
-
-        with self.generation_lock:
-            if self.is_generating_scenario:
-                if is_initial_statement or force_publish:
-                    self.get_logger().info(f"[{self.role}] Generation already in progress. Deferring finish trigger.")
-                    self.start_signal_deferred = True
+        with self._evaluation_state_lock:
+            if self.waiting_for_evaluation:
+                self.am_i_intervention_responder = is_intervention
+                self.pending_intervention_text = intervention_text
+                self.get_logger().info(f"[{self.role}] Deferred generation due to evaluation.")
                 return
-            self.is_generating_scenario = True
-            self.start_signal_deferred = False
-            self.generation_start_time = time.time()
+
+            with self.generation_lock:
+                if self.is_generating_scenario:
+                    if is_initial_statement or force_publish:
+                        self.get_logger().info(f"[{self.role}] Generation already in progress. Deferring finish trigger.")
+                        self.start_signal_deferred = True
+                    return
+                self.is_generating_scenario = True
+                self.start_signal_deferred = False
+                self.generation_start_time = time.time()
+                request_id = f"{self.role}_{self.step_count}_{time.time_ns()}"
+                self.active_docs_request_id = request_id
 
         def generation_task():
             try:
@@ -455,10 +472,9 @@ class AFSFamilyMember(Node):
                 # 2. Request documents from DocumentProcessor
                 self.behavioral_descriptors = None
                 self.glass_castle_data = None
-                self.active_docs_request_id = f"{self.role}_{self.step_count}_{time.time()}"
-                self.get_logger().debug(f"[{self.role}] Requesting clinical info (Req: {self.active_docs_request_id})")
-                self.behavior_req_pub.publish(String(data=json.dumps({"x": x, "y": y, "role": self.role, "request_id": self.active_docs_request_id})))
-                self.few_shot_req_pub.publish(String(data=json.dumps({"role": self.role, "request_id": self.active_docs_request_id})))
+                self.get_logger().debug(f"[{self.role}] Requesting clinical info (Req: {request_id})")
+                self.behavior_req_pub.publish(String(data=json.dumps({"x": x, "y": y, "role": self.role, "request_id": request_id})))
+                self.few_shot_req_pub.publish(String(data=json.dumps({"role": self.role, "request_id": request_id})))
 
                 # 3. Wait for results (increased timeout for robustness)
                 wait_start = time.time()
@@ -491,7 +507,7 @@ class AFSFamilyMember(Node):
                 current_history = self.load_full_history()
 
                 req_payload = {
-                    "request_id": self.active_docs_request_id,
+                    "request_id": request_id,
                     "role": self.role,
                     "language": self.language,
                     "family_config": self.family_config,
@@ -516,12 +532,13 @@ class AFSFamilyMember(Node):
                 }
 
                 self.generator_req_pub.publish(String(data=json.dumps(req_payload)))
-                self.get_logger().debug(f"[{self.role}] Dialogue request sent to generator (Req: {self.active_docs_request_id})")
+                self.get_logger().debug(f"[{self.role}] Dialogue request sent to generator (Req: {request_id})")
 
             except Exception as e:
                 self.get_logger().error(f"Error triggering generator: {e}")
                 with self.generation_lock:
-                    self.is_generating_scenario = False
+                    if self.active_docs_request_id == request_id:
+                        self.is_generating_scenario = False
 
         threading.Thread(target=generation_task, daemon=True).start()
 
@@ -531,6 +548,14 @@ class AFSFamilyMember(Node):
             data = json.loads(msg.data)
             role = data.get("role")
             if role != self.role:
+                return
+
+            request_id = data.get("request_id")
+            if request_id != self.active_docs_request_id:
+                self.get_logger().debug(
+                    f"[{self.role}] Ignoring stale generation result (Req: {request_id}; "
+                    f"active: {self.active_docs_request_id})."
+                )
                 return
 
             scenario = data.get("scenario")
@@ -604,7 +629,7 @@ class AFSFamilyMember(Node):
                 if self.start_signal_deferred or force_publish:
                     # A finish trigger may arrive while a normal dialogue is
                     # generating. Honor it when that in-flight result arrives.
-                    self.get_logger().info(f"[{self.role}] Publishing deferred/forced statement.")
+                    self.get_logger().debug(f"[{self.role}] Publishing deferred/forced statement.")
                     self.publish_pending_scenario(force_publish=True)
                     self.start_signal_deferred = False
                 elif is_initial_statement:
@@ -625,8 +650,10 @@ class AFSFamilyMember(Node):
 
     def publish_pending_scenario(self, from_leader_instruction: bool = False, force_publish: bool = False):
         """Publish the pending dialogue/move, and prepare the hand-off (one-ahead) to the next speaker."""
-        if self.waiting_for_evaluation and not from_leader_instruction:
-            return
+        with self._evaluation_state_lock:
+            waiting_for_evaluation = self.waiting_for_evaluation
+            if waiting_for_evaluation and not from_leader_instruction:
+                return
 
         with self.generation_lock:
             if self.is_generating_scenario and not force_publish:
@@ -671,7 +698,12 @@ class AFSFamilyMember(Node):
                 turns_after = turns + 1  # We are about to write this turn
                 if turns_after > 0 and turns_after % self.turns_per_step == 0:
                     self.get_logger().debug(f"[{self.role}] Step boundary reached ({turns_after} turns). Evaluation will follow. Early relay suppressed.")
-                    self.waiting_for_evaluation = True
+                    with self._evaluation_state_lock:
+                        self.waiting_for_evaluation = True
+                        step_idx = turns_after // self.turns_per_step
+                        if step_idx > self.last_triggered_step:
+                            self.last_triggered_step = step_idx
+                            self.pending_eval_step_id = f"S{step_idx}"
                     self.pending_relay_recipient = None
 
                 # Enforce fixed voice id in the scenario string for TTS
@@ -705,7 +737,7 @@ class AFSFamilyMember(Node):
 
         # 2. RELAY PREPARATION (Early preparation for next speaker — ONE-AHEAD LIMIT)
         # Only queue the NEXT speaker's generation. No further ahead.
-        if self.pending_relay_recipient and not self.waiting_for_evaluation and not self.next_generation_queued:
+        if self.pending_relay_recipient and not waiting_for_evaluation and not self.next_generation_queued:
             next_target = self.pending_relay_recipient
             t_msg = String()
             t_msg.data = f"{self.role},{next_target},prepare_turn"
@@ -741,16 +773,29 @@ class AFSFamilyMember(Node):
                 if cmd == 'prepare_turn':
                     self.trigger_scenario_generation(force_publish=False)
                 elif cmd == 'start_turn' or cmd == 'resume_turn':
-                    if self.pending_scenario_conversation is None:
-                        # If no pre-generation happened (e.g. after evaluation), force it now
-                        self.trigger_scenario_generation(force_publish=True)
-                    else:
-                        self.publish_pending_scenario(from_leader_instruction=True, force_publish=True)
+                    self._handle_turn_start(sender, cmd)
                 elif cmd == 'conversation':
                     # Log but do not act on other's conversation messages
                     pass
-        except Exception:
-            pass
+        except Exception as e:
+            self.get_logger().debug(f"[{self.role}] Error handling family action: {e}")
+
+    def _handle_turn_start(self, sender: str, command: str):
+        """Start a turn, or retain the command until the pending evaluation has finished."""
+        with self._evaluation_state_lock:
+            if self.waiting_for_evaluation:
+                self.pending_turn_start = (sender, command)
+                self.get_logger().debug(
+                    f"[{self.role}] Queued {command} from {sender}; waiting for evaluation completion."
+                )
+                return
+
+            self.get_logger().debug(f"[{self.role}] Handling {command} from {sender}.")
+            if self.pending_scenario_conversation is None:
+                # If no pre-generation happened (e.g. after evaluation), force it now.
+                self.trigger_scenario_generation(force_publish=True)
+            else:
+                self.publish_pending_scenario(from_leader_instruction=True, force_publish=True)
 
     def tts_status_callback(self, msg: String):
         """Detect the moment my own speech playback starts, then check the evaluation trigger and sync terminal output."""
@@ -765,12 +810,13 @@ class AFSFamilyMember(Node):
                     if turns > 0 and turns % self.turns_per_step == 0:
                         step_idx = turns // self.turns_per_step
                         step_id = f"S{step_idx}"
-                        if step_idx > self.last_triggered_step:
-                            self.get_logger().debug(f"[{self.role}] Threshold reached. Global evaluation {step_id} will be triggered after audio/move.")
-                            self.waiting_for_evaluation = True
-                            self.last_triggered_step = step_idx
-                            self.pending_eval_step_id = step_id
-                            self.pending_relay_recipient = None  # Stop relay if evaluation is pending
+                        with self._evaluation_state_lock:
+                            if step_idx > self.last_triggered_step:
+                                self.get_logger().debug(f"[{self.role}] Threshold reached. Global evaluation {step_id} will be triggered after audio/move.")
+                                self.waiting_for_evaluation = True
+                                self.last_triggered_step = step_idx
+                                self.pending_eval_step_id = step_id
+                                self.pending_relay_recipient = None  # Stop relay if evaluation is pending
 
                     # 2. SYNCHRONIZED TERMINAL OUTPUT
                     if self.last_publish_metadata:
@@ -822,14 +868,19 @@ class AFSFamilyMember(Node):
 
         # I AM THE ONE WHO FINISHED
         # If I have a deferred evaluation trigger, fire it now that my audio/move is done
-        if self.pending_eval_step_id:
-            self.get_logger().debug(f"[{self.role}] Turn complete. Triggering global evaluation for {self.pending_eval_step_id}.")
-            self.trigger_eval_pub.publish(String(data=self.pending_eval_step_id))
-            self.pending_eval_step_id = None
+        with self._evaluation_state_lock:
+            pending_eval_step_id = self.pending_eval_step_id
+            if pending_eval_step_id:
+                self.pending_eval_step_id = None
+            waiting_for_evaluation = self.waiting_for_evaluation
+
+        if pending_eval_step_id:
+            self.get_logger().debug(f"[{self.role}] Turn complete. Triggering global evaluation for {pending_eval_step_id}.")
+            self.trigger_eval_pub.publish(String(data=pending_eval_step_id))
             return
 
         # If we are waiting for evaluation, do not relay
-        if self.waiting_for_evaluation:
+        if waiting_for_evaluation:
             self.get_logger().info(f"[{self.role}] Finished move, but evaluation is pending. Stopping relay.")
             return
 
@@ -879,7 +930,9 @@ class AFSFamilyMember(Node):
             self.pending_tts_finish = False
             self.next_turn_recipient = None
             self.pending_relay_recipient = None
-            self.waiting_for_evaluation = False
+            with self._evaluation_state_lock:
+                self.waiting_for_evaluation = False
+                self.pending_turn_start = None
             with self.generation_lock:
                 self.is_generating_scenario = False
         elif text.startswith('user_speech_transcribed:'):
@@ -932,13 +985,25 @@ class AFSFamilyMember(Node):
 
     def evaluation_complete_callback(self, msg: String):
         """On the FACES IV evaluation-complete notice, clear the pending state, and resume the conversation if I am the leader."""
-        self.get_logger().debug(f"[{self.role}] Evaluation complete for {msg.data}. Resetting pending states for new step.")
-        self.waiting_for_evaluation = False
+        with self._evaluation_state_lock:
+            self.waiting_for_evaluation = False
+            pending_turn_start = self.pending_turn_start
+            self.pending_turn_start = None
+            # Clear any pending scenario to force fresh generation for the new step guidelines.
+            # Keep this atomic with releasing the evaluation wait so a concurrent
+            # resume_turn cannot publish an old pre-generated scenario.
+            self.pending_scenario_conversation = None
+            self.pending_scenario_move = None
+            self.audio_synthesis_requested = False
+        self.get_logger().debug(f"[{self.role}] Evaluation complete for {msg.data}. Cleared evaluation wait.")
 
-        # Clear any pending scenario to force fresh generation for the new step guidelines
-        self.pending_scenario_conversation = None
-        self.pending_scenario_move = None
-        self.audio_synthesis_requested = False
+        # A resume command can arrive before this node processes the completion
+        # notification. Replay that command now instead of silently losing the turn.
+        if pending_turn_start is not None:
+            sender, command = pending_turn_start
+            self.get_logger().debug(f"[{self.role}] Processing queued {command} from {sender} after evaluation.")
+            self._handle_turn_start(sender, command)
+            return
 
         # Leader coordinates the resumption of the conversation
         if self.role == self.family_config[0]:
@@ -982,13 +1047,14 @@ class AFSFamilyMember(Node):
                     others = [m for m in self.family_config if m != last_speaker]
                     next_speaker = others[0] if others else self.role
 
-                self.get_logger().debug(f"[{self.role}] Resuming: last speaker was '{last_speaker}', next is '{next_speaker}'.")
+                self.get_logger().debug(f"[{self.role}] Resuming after {msg.data}: last speaker was '{last_speaker}', next is '{next_speaker}'.")
 
                 if next_speaker == self.role:
                     self.trigger_scenario_generation(force_publish=True)
                 else:
                     t_msg = String()
                     t_msg.data = f"{self.role},{next_speaker},resume_turn"
+                    self.get_logger().debug(f"[{self.role}] Sending resume_turn to {next_speaker}.")
                     self.family_publisher.publish(t_msg)
             except Exception as e:
                 self.get_logger().error(f"Error resuming conversation: {e}")
@@ -1007,7 +1073,8 @@ class AFSFamilyMember(Node):
 
         self.get_logger().info(f"[{self.role}] Subjective FACES IV evaluation requested for {step_id}. Forwarding to evaluator node.")
         self.last_evaluated_step = step_idx
-        self.waiting_for_evaluation = True
+        with self._evaluation_state_lock:
+            self.waiting_for_evaluation = True
 
         history = self.load_full_history()
 

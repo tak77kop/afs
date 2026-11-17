@@ -33,15 +33,47 @@ class AFSGenerator(Node):
 
         # --- ROS2 communication setup ---
         self.create_subscription(String, 'afs_generator_request', self.request_callback, 10)
+        self.create_subscription(String, 'afs_generator_cancel', self.cancel_callback, 10)
         self.result_pub = self.create_publisher(String, 'afs_generator_results', 10)
+        self.request_lock = threading.Lock()
+        self.active_requests = {}
 
         self.get_logger().info("AFS Dialogue Generator Node Started.")
 
     def request_callback(self, msg: String):
         """Run generation on a separate thread so the ROS2 executor doesn't get blocked."""
-        threading.Thread(target=self._process_request, args=(msg.data,), daemon=True).start()
+        try:
+            request_id = json.loads(msg.data).get("request_id")
+        except (json.JSONDecodeError, AttributeError):
+            request_id = None
+        cancel_event = threading.Event()
+        if request_id:
+            with self.request_lock:
+                self.active_requests[request_id] = cancel_event
+        threading.Thread(
+            target=self._process_request,
+            args=(msg.data, cancel_event),
+            daemon=True,
+        ).start()
 
-    def _process_request(self, msg_data: str):
+    def cancel_callback(self, msg: String):
+        """Signal an active generation to stop before its next API retry."""
+        try:
+            data = json.loads(msg.data)
+            request_id = data.get("request_id")
+            role = data.get("role", "unknown")
+            with self.request_lock:
+                cancel_event = self.active_requests.get(request_id)
+                if cancel_event is not None:
+                    cancel_event.set()
+            if cancel_event is not None:
+                self.get_logger().info(f"Cancellation received for {role} (Request: {request_id}).")
+            else:
+                self.get_logger().debug(f"Cancellation received for inactive request {request_id}.")
+        except (json.JSONDecodeError, AttributeError) as e:
+            self.get_logger().warning(f"Invalid generator cancellation message: {e}")
+
+    def _process_request(self, msg_data: str, cancel_event: threading.Event):
         request_id = "unknown"
         role = "unknown"
         metadata = {}
@@ -83,7 +115,12 @@ class AFSGenerator(Node):
                 llm_temperature=llm_temperature,
                 api_timeout_seconds=data.get("api_timeout_seconds", 45.0),
                 api_max_attempts=data.get("api_max_attempts", 3),
+                cancel_event=cancel_event,
             )
+
+            if cancel_event.is_set():
+                self.get_logger().info(f"Discarding cancelled generation result (Request: {request_id}).")
+                return
 
             result = {
                 "request_id": request_id,
@@ -96,6 +133,9 @@ class AFSGenerator(Node):
             self.get_logger().info(f"Dialogue generated for {role} ({request_id})")
 
         except Exception as e:
+            if cancel_event.is_set():
+                self.get_logger().info(f"Generation cancelled (Request: {request_id}); no result will be published.")
+                return
             self.get_logger().error(f"Error in dialogue generation for {role}: {e}")
             try:
                 error_result = {
@@ -108,6 +148,11 @@ class AFSGenerator(Node):
                 self.result_pub.publish(String(data=json.dumps(error_result)))
             except Exception:
                 pass
+        finally:
+            if request_id != "unknown":
+                with self.request_lock:
+                    if self.active_requests.get(request_id) is cancel_event:
+                        self.active_requests.pop(request_id, None)
 
 
 def main(args=None):
